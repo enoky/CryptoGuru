@@ -26,6 +26,8 @@ export interface GlobalStats {
   totalMarketCap: number;
   marketCapChange24h: number | null;
   btcDominance: number | null;
+  /** USD → currency rates by code (e.g. EUR: 0.92). Missing when only the fallback source answered. */
+  fx?: Record<string, number>;
 }
 
 export interface TrendingCoin {

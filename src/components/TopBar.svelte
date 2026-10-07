@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cycleTheme, theme } from '../lib/theme.svelte';
+  import CurrencyPicker from './CurrencyPicker.svelte';
   import Icon from './Icon.svelte';
 
   let hidden = $state(false);
@@ -29,8 +30,11 @@
     <a href="#/" class="flex min-h-11 items-center gap-2 text-lg font-bold">
       <img src="/icon.svg" alt="" width="28" height="28" class="rounded-lg" />CryptoGuru
     </a>
-    <button type="button" class="grid size-11 place-items-center rounded-full hover:bg-surface-2" onclick={cycleTheme} aria-label={themeLabel}>
-      <Icon name={theme.choice === 'system' ? 'auto' : theme.choice === 'dark' ? 'moon' : 'sun'} />
-    </button>
+    <div class="flex items-center gap-1">
+      <CurrencyPicker />
+      <button type="button" class="grid size-11 place-items-center rounded-full hover:bg-surface-2" onclick={cycleTheme} aria-label={themeLabel}>
+        <Icon name={theme.choice === 'system' ? 'auto' : theme.choice === 'dark' ? 'moon' : 'sun'} />
+      </button>
+    </div>
   </div>
 </header>

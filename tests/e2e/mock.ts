@@ -39,7 +39,11 @@ export function makeSnapshot(asOf = Date.now(), count = 60): Snapshot {
   });
   return {
     markets: { data, asOf, source: 'coingecko' },
-    global: { data: { totalMarketCap: 2.41e12, marketCapChange24h: 1.23, btcDominance: 56.1 }, asOf, source: 'coingecko' },
+    global: {
+      data: { totalMarketCap: 2.41e12, marketCapChange24h: 1.23, btcDominance: 56.1, fx: { EUR: 0.92, GBP: 0.79, JPY: 150 } },
+      asOf,
+      source: 'coingecko',
+    },
     trending: {
       data: data.slice(3, 9).map((a) => ({ id: a.id, symbol: a.symbol, name: a.name, image: a.image, rank: a.rank })),
       asOf,

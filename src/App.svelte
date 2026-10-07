@@ -4,6 +4,7 @@
   import StatusBanner from './components/StatusBanner.svelte';
   import TopBar from './components/TopBar.svelte';
   import { startMarket } from './lib/market.svelte';
+  import { startPwa } from './lib/pwa.svelte';
   import { router, startRouter } from './lib/router.svelte';
   import { startTheme } from './lib/theme.svelte';
   import About from './routes/About.svelte';
@@ -17,6 +18,7 @@
   onMount(() => {
     startTheme();
     startRouter();
+    startPwa();
     void startMarket();
   });
 </script>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { direction, formatPct, formatPrice, formatUsdCompact, freshness } from '../../src/lib/format';
+import { direction, formatPct, formatPrice, formatMoneyCompact, freshness } from '../../src/lib/format';
 
 describe('format', () => {
   it('formats prices by size so they fit on a phone', () => {
@@ -11,8 +11,8 @@ describe('format', () => {
   });
 
   it('shortens big dollar values', () => {
-    expect(formatUsdCompact(1.23e12)).toBe('$1.23T');
-    expect(formatUsdCompact(845_200_000)).toBe('$845.2M');
+    expect(formatMoneyCompact(1.23e12)).toBe('$1.23T');
+    expect(formatMoneyCompact(845_200_000)).toBe('$845.2M');
   });
 
   it('signs percentages with + and a true minus', () => {

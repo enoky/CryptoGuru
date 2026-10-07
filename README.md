@@ -6,6 +6,8 @@ Live prices, charts and plain-English market context for the top 100 crypto asse
 - **Coin pages:** 7D / 30D / 1Y touch-friendly chart, key stats with ⓘ explanations, 30-day volatility, add to watchlist.
 - **Watchlist:** saved on the device only; reorder or remove in edit mode.
 - **Robust:** every data type has backup sources; if everything is down the app shows the last saved data with a clear "as of" time.
+- **Works offline and installs like an app:** after one visit it opens with no connection; add it to your home screen from the About tab.
+- **Your currency:** USD, EUR, GBP, CAD, AUD, JPY, INR or CHF (top bar), converted with CoinGecko's exchange rates.
 - **Signals:** six technical indicators per coin (200-day trend, 50/200 cross, MACD, RSI, volume, Fear & Greed) combined into a −100…+100 score with a confidence level, and every reason spelled out in plain English. The Signals tab ranks and filters all coins. Not predictions or financial advice.
 
 See [`PLAN.md`](./PLAN.md) for the full design and [`PROMPT.md`](./PROMPT.md) for the brief it came from.
@@ -26,7 +28,9 @@ Browser (Svelte app) ──► Cloudflare Worker /api/*  ──► CoinGecko, Bi
 | `shared/` | API clients, validation, failover — used by both the Worker and the browser |
 | `worker/` | The Cloudflare Worker: `/api/snapshot`, `/api/prices`, `/api/candles/:id?range=7d\|30d\|1y`, `/api/signals`, `/api/health`, and the two cron jobs |
 | `tests/unit/` | Vitest tests (formatting, maths, every API client, failover, the Worker) |
-| `tests/e2e/` | Playwright tests at 360, 375 and 412 px phone sizes, then desktop, with mocked APIs |
+| `tests/e2e/` | Playwright tests at 360, 375 and 412 px phone sizes, then desktop, with mocked APIs (`offline.spec.ts` runs with the service worker on) |
+| `src/sw/sw.template.js` | The service worker; the build fills in the list of files to keep offline (see `vite.config.ts`) |
+| `scripts/make-icons.mjs` | Re-renders the PNG app icons from `public/icon.svg` |
 
 ## Develop
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatTime, formatUsdCompact } from '../lib/format';
+  import { formatTime, formatMoneyCompact } from '../lib/format';
   import { GLOSSARY } from '../lib/glossary';
   import { market } from '../lib/market.svelte';
   import BottomSheet from './BottomSheet.svelte';
@@ -19,7 +19,7 @@
     aria-label="Market overview. Tap for details">
     <div class="min-w-0">
       <div class="truncate text-xs text-muted">Market cap</div>
-      <div class="font-semibold tabular-nums">{formatUsdCompact(g?.data.totalMarketCap)}</div>
+      <div class="font-semibold tabular-nums">{formatMoneyCompact(g?.data.totalMarketCap)}</div>
       <ChangeText value={g?.data.marketCapChange24h} class="text-xs" />
     </div>
     <div class="min-w-0">
@@ -42,7 +42,7 @@
   <div class="space-y-5">
     {#if g}
       <section>
-        <h3 class="font-semibold">{GLOSSARY.totalCap.title}: {formatUsdCompact(g.data.totalMarketCap)}</h3>
+        <h3 class="font-semibold">{GLOSSARY.totalCap.title}: {formatMoneyCompact(g.data.totalMarketCap)}</h3>
         <p class="mt-1"><ChangeText value={g.data.marketCapChange24h} /> in 24 hours</p>
         <p class="mt-1 text-muted">{GLOSSARY.totalCap.text}</p>
       </section>

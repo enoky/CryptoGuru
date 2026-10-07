@@ -65,7 +65,8 @@ export async function buildSnapshot(prev: Snapshot, fetchFn: FetchFn, breaker: C
     refresh('sparklines', [{ name: 'coingecko', run: () => coingecko.fetchSparklines(fetchFn, cg) }]),
     refresh('global', [
       { name: 'coingecko', run: () => coingecko.fetchGlobal(fetchFn, cg) },
-      { name: 'coinpaprika', run: () => coinpaprika.fetchGlobal(fetchFn, net) },
+      // CoinPaprika has no exchange rates: keep the last known ones.
+      { name: 'coinpaprika', run: async () => ({ ...(await coinpaprika.fetchGlobal(fetchFn, net)), fx: prev.global?.data.fx }) },
     ]),
     refresh('trending', [{ name: 'coingecko', run: () => coingecko.fetchTrending(fetchFn, cg) }]),
     refresh('fearGreed', [{ name: 'alternative.me', run: () => fetchFearGreed(fetchFn, net) }]),

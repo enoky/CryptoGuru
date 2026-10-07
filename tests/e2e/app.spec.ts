@@ -234,3 +234,51 @@ test('markets can be sorted by signal score', async ({ page }) => {
   await page.getByRole('radio', { name: 'Signal score' }).click();
   await expect(page.getByRole('heading', { name: 'Sorted by signal score' })).toBeVisible();
 });
+
+test('switching currency converts every price and is remembered', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: /^Bitcoin, \$64,300/ }).first()).toBeVisible();
+  await page.getByRole('button', { name: /Change currency/ }).locator('visible=true').click();
+  const sheet = page.getByRole('dialog', { name: 'Currency' });
+  await expect(sheet).toBeVisible();
+  await expectTapTargets(page);
+  await axe(page);
+  await sheet.getByRole('radio', { name: /EUR/ }).click();
+  await expect(sheet).toBeHidden();
+
+  // Mock rate: EUR 0.92 → 64,300 × 0.92 = 59,156
+  await expect(page.getByRole('link', { name: /^Bitcoin, €59,156/ }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Market overview/ })).toContainText('€');
+  await expectNoHorizontalScroll(page);
+
+  await page.reload();
+  await expect(page.getByRole('link', { name: /^Bitcoin, €59,156/ }).first()).toBeVisible();
+  await page.goto('/#/asset/bitcoin');
+  await expect(page.locator('main').getByText('€59,156').first()).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Signals' })).toContainText('€');
+});
+
+test('yen prices have no decimals', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Change currency/ }).locator('visible=true').click();
+  await page.getByRole('dialog', { name: 'Currency' }).getByRole('radio', { name: /JPY/ }).click();
+  // XRP $0.5234 × 150 = ¥78.51 → ¥79 (no sen)
+  await expect(page.getByRole('link', { name: /^XRP, ¥79,/ })).toBeVisible();
+});
+
+test('accessibility: watchlist, dark Signals and the install card', async ({ page }) => {
+  await page.goto('/#/watchlist');
+  await expect(page.getByText('Your watchlist is empty')).toBeVisible();
+  await axe(page);
+  await page.getByRole('button', { name: 'Add Bitcoin to watchlist' }).click();
+  await axe(page);
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/#/signals');
+  await expect(page.locator('main ul a').first()).toBeVisible();
+  await axe(page);
+
+  await page.goto('/#/about');
+  await expect(page.getByRole('heading', { name: 'Add CryptoGuru to your home screen' })).toBeVisible();
+  await axe(page);
+});

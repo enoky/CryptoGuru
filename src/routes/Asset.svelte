@@ -11,7 +11,7 @@
   import PriceChart from '../components/PriceChart.svelte';
   import SignalCard from '../components/SignalCard.svelte';
   import StatTile from '../components/StatTile.svelte';
-  import { formatCompact, formatPct, formatPrice, formatTime, formatUsdCompact, sourceLabel } from '../lib/format';
+  import { formatCompact, formatPct, formatPrice, formatTime, formatMoneyCompact, sourceLabel } from '../lib/format';
   import { findAsset, getCandles, market } from '../lib/market.svelte';
   import { back } from '../lib/router.svelte';
   import { lsGet, lsSet } from '../lib/storage';
@@ -169,7 +169,7 @@
     {#if stable}
       <section class="rounded-2xl border border-line bg-surface p-4 text-[15px]" aria-label="Signals">
         <h2 class="text-sm font-medium text-muted">Signals</h2>
-        <p class="mt-1">{asset.name} is a stablecoin: its price is designed to stay at about $1, so trend signals don’t apply.</p>
+        <p class="mt-1">{asset.name} is a stablecoin: its price is designed to stay at about US$1, so trend signals don’t apply.</p>
       </section>
     {:else if signal}
       <SignalCard {signal} name={asset.name} />
@@ -187,10 +187,10 @@
     <h2 id="stats-heading" class="mb-2 px-1 font-semibold">Key stats</h2>
     <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
       <StatTile label="Market cap" term="marketCap">
-        {formatUsdCompact(asset.marketCap)}
+        {formatMoneyCompact(asset.marketCap)}
         {#snippet sub()}Rank #{asset.rank}{/snippet}
       </StatTile>
-      <StatTile label="24h volume" term="volume">{formatUsdCompact(asset.volume24h)}</StatTile>
+      <StatTile label="24h volume" term="volume">{formatMoneyCompact(asset.volume24h)}</StatTile>
       <StatTile label="Circulating" term="circulating">
         {formatCompact(asset.circulatingSupply)}
         {#snippet sub()}{asset.symbol}{/snippet}

@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import type { Candle, Range } from '../../shared/types';
   import { formatDate, formatPrice } from '../lib/format';
+  import { displayCurrency } from '../lib/money.svelte';
   import { isDark } from '../lib/theme.svelte';
 
   let { candles, range, name }: { candles: Candle[]; range: Range; name: string } = $props();
@@ -54,6 +55,13 @@
       crosshair: { vertLine: { labelBackgroundColor: css('--fg') }, horzLine: { labelBackgroundColor: css('--fg') } },
     });
     series.applyOptions({ lineColor: color, topColor: `${color}55`, bottomColor: `${color}05` });
+  });
+
+  // Redraw the price axis when the display currency changes.
+  $effect(() => {
+    const { code, rate } = displayCurrency();
+    if (!chart) return;
+    chart.applyOptions({ localization: { priceFormatter: (p: number) => (void code, void rate, formatPrice(p)) } });
   });
 
   $effect(() => {

@@ -29,7 +29,11 @@ export const cgMarket = (id: string, symbol: string, price: number, rank: number
 export const CG_MARKETS = [cgMarket('bitcoin', 'btc', 64000, 1), cgMarket('ethereum', 'eth', 3200, 2), cgMarket('tether', 'usdt', 1, 3)];
 
 export const CG_GLOBAL = {
-  data: { total_market_cap: { usd: 2.4e12 }, market_cap_change_percentage_24h_usd: 1.2, market_cap_percentage: { btc: 56.1, eth: 12 } },
+  data: {
+    total_market_cap: { usd: 2.4e12, eur: 2.4e12 * 0.92, jpy: 2.4e12 * 150, btc: 3.75e7 },
+    market_cap_change_percentage_24h_usd: 1.2,
+    market_cap_percentage: { btc: 56.1, eth: 12 },
+  },
 };
 
 export const CG_TRENDING = {

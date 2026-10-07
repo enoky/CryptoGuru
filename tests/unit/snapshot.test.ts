@@ -29,6 +29,7 @@ describe('buildSnapshot', () => {
     const { snapshot } = await buildSnapshot(first.snapshot, down, new CircuitBreaker(), { ...opts, now: later });
     expect(snapshot.markets?.source).toBe('coinpaprika');
     expect(snapshot.global?.source).toBe('coinpaprika');
+    expect(snapshot.global?.data.fx?.EUR).toBeCloseTo(0.92); // exchange rates kept from CoinGecko
     const btc = withSparklines(snapshot).find((a) => a.id === 'bitcoin')!;
     expect(btc.price).toBe(63900);
     expect(btc.sparkline).toHaveLength(42); // kept from the last good sparklines

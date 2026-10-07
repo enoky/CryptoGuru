@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { CoinSignal } from '../../shared/signals';
   import type { Asset } from '../../shared/types';
-  import { direction, formatPct, formatPrice, formatUsdCompact } from '../lib/format';
+  import { direction, formatPct, formatPrice, formatMoneyCompact } from '../lib/format';
   import ChangeText from './ChangeText.svelte';
   import Logo from './Logo.svelte';
   import SignalBadge from './SignalBadge.svelte';
@@ -28,8 +28,8 @@
   </div>
   <Sparkline values={a.sparkline} class="max-[359px]:hidden" />
   <div class="hidden text-right tabular-nums lg:block"><ChangeText value={a.change7d} /></div>
-  <div class="hidden text-right tabular-nums lg:block">{formatUsdCompact(a.marketCap)}</div>
-  <div class="hidden text-right tabular-nums lg:block">{formatUsdCompact(a.volume24h)}</div>
+  <div class="hidden text-right tabular-nums lg:block">{formatMoneyCompact(a.marketCap)}</div>
+  <div class="hidden text-right tabular-nums lg:block">{formatMoneyCompact(a.volume24h)}</div>
   <div class="hidden lg:block">{#if signal}<SignalBadge {signal} />{/if}</div>
   <div class="min-w-[5.5rem] text-right">
     <div class="text-[17px] font-semibold tabular-nums">{formatPrice(a.price)}</div>

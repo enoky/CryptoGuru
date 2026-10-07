@@ -278,7 +278,7 @@ A web app manifest and icons let users "Add to Home Screen" on Android and iOS. 
 | First load on a mid-range Android phone over 4G (snapshot visible) | < 2 s |
 | Largest Contentful Paint | < 2.0 s |
 | Cumulative Layout Shift | < 0.05 |
-| JS bundle, initial route | < 120 KB gz (chart library lazy-loaded on the asset page) |
+| JS bundle, initial route | < 120 KB gz (chart library lazy-loaded on the asset page). Currently 49 KB. |
 | Lighthouse **mobile** profile (Performance, Accessibility, Best Practices, SEO) | ≥ 90 each, enforced in CI |
 | Scrolling the 50-coin list | 60 fps on a mid-range phone (no jank) |
 | Tap response (Interaction to Next Paint) | < 200 ms |
@@ -352,7 +352,13 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
 
-**Status:** Phases 0 and 1 (MVP) are built and tested against mocked APIs. Phase 2 signals are built: indicator maths and rules with tests, the Worker's batch rating job and `/api/signals`, the coin-page signal card and "Why this rating?" sheet, the Signals screener with filters, and sorting Markets by signal score (90 unit tests, 60 browser tests). Still to do in Phase 2: offline app shell (service worker) and the currency selector. Nothing has been verified against the live APIs or deployed yet. Remaining from Phase 1: Lighthouse CI budgets and pull-to-refresh/swipe gestures.
+**Status:** Phases 0, 1 and 2 are built and tested against mocked APIs (97 unit tests, 80 browser tests at 360/375/412 px phones and desktop):
+- Phase 2 signals: indicator maths and rules, the Worker's batch rating job and `/api/signals`, the coin-page signal card and "Why this rating?" sheet, the Signals screener, sorting Markets by signal score.
+- Phase 2 offline and install: a service worker keeps the app shell on the device, so the app opens with no connection and shows its saved data; PNG and maskable icons; an install button where the browser offers one (instructions on iPhone); a "new version ready" banner.
+- Phase 2 currency selector: USD, EUR, GBP, CAD, AUD, JPY, INR, CHF. Exchange rates come from CoinGecko's `/global` market caps (EUR total ÷ USD total), so they cost no extra API calls; the last known rates are kept if CoinPaprika answers instead.
+- Accessibility: axe checks on every screen and sheet, in light and dark mode.
+
+Not yet done: verifying against the live APIs and deploying; Lighthouse CI budgets and pull-to-refresh/swipe gestures (Phase 1 leftovers).
 
 ---
 
@@ -369,4 +375,4 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | Indicator thresholds are arbitrary | Signals feel unreliable | Use the standard textbook values, document them, and let the Phase 3 backtest inform tuning |
 | Can attribution and redistribution terms allow caching data for all users? ⚠ | Possible terms violation | Read each provider's terms before building; keep cache times short; switch provider if needed |
 | **Open:** should the default list cover top 50 or top 100? | Upstream cost and UI density | Fetch 100 (same single call) and display 50 by default with "show more" |
-| **Open:** fiat currencies other than USD? | Conversion source needed | Use CoinGecko `vs_currency` in Phase 2 rather than adding another FX API |
+| **Resolved:** fiat currencies other than USD | — | Rates derived from CoinGecko `/global` market caps in each currency: no extra API and no extra calls |

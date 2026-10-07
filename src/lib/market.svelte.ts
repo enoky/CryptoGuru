@@ -2,6 +2,7 @@ import { CANDLE_TTL_MS } from '../../shared/candles';
 import { REFRESH_MS, withLivePrices, withSparklines } from '../../shared/snapshot';
 import type { Asset, CandleSet, PriceMap, Range, Snapshot } from '../../shared/types';
 import { loadCandles, loadPrices, loadSnapshot } from './api';
+import { setRates } from './money.svelte';
 import { idbGet, idbSet } from './storage';
 
 const SNAPSHOT_KEY = 'snapshot:v1';
@@ -35,6 +36,7 @@ export async function startMarket() {
   const cached = await idbGet<Snapshot>(SNAPSHOT_KEY);
   if (cached?.markets && !market.snapshot) {
     market.snapshot = cached;
+    setRates(cached.global?.data.fx);
     market.loading = false;
   }
   await refresh();
@@ -63,6 +65,7 @@ export async function refresh() {
   try {
     const snap = await loadSnapshot(market.snapshot);
     market.snapshot = snap;
+    setRates(snap.global?.data.fx);
     market.error = null;
     void idbSet(SNAPSHOT_KEY, $state.snapshot(snap));
   } catch (err) {

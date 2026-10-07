@@ -113,7 +113,7 @@
   {/if}
   <p class="mt-3 px-1 text-sm {stale ? 'text-warn' : 'text-muted'}">
     {stale ? 'May be out of date · ' : ''}Ratings updated {formatTime(asOf)}. Each coin is re-rated about every 2 hours.
-    Stablecoins aren’t rated: their price is designed to stay at $1.
+    Stablecoins aren’t rated: their price is designed to stay at US$1.
   </p>
 {/if}
 

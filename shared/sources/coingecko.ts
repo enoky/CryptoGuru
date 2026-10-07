@@ -1,6 +1,7 @@
 import * as v from 'valibot';
 import { fetchJson, type FetchFn } from '../http';
 import { downsample } from '../series';
+import { fxFromMarketCaps } from '../currency';
 import type { Asset, Candle, GlobalStats, Range, TrendingCoin } from '../types';
 import { finiteOrNull, isPositive, parseItems, parseOne, safeImage } from '../validate';
 
@@ -117,6 +118,7 @@ export async function fetchGlobal(fetchFn: FetchFn, o: CoinGeckoOptions = {}): P
     totalMarketCap: total,
     marketCapChange24h: finiteOrNull(data.market_cap_change_percentage_24h_usd),
     btcDominance: finiteOrNull(data.market_cap_percentage.btc),
+    fx: fxFromMarketCaps(data.total_market_cap),
   };
 }
 

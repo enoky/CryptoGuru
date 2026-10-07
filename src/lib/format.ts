@@ -1,24 +1,54 @@
-const usd = (opts: Intl.NumberFormatOptions) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', ...opts });
+import type { CurrencyCode } from '../../shared/currency';
+import { displayCurrency } from './money.svelte';
 
-const big = usd({ maximumFractionDigits: 0 });
-const normal = usd({ minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const small = usd({ maximumSignificantDigits: 4 });
-const compact = usd({ notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+interface Formatters {
+  big: Intl.NumberFormat;
+  normal: Intl.NumberFormat;
+  small: Intl.NumberFormat;
+  compact: Intl.NumberFormat;
+}
+
+const cache = new Map<CurrencyCode, Formatters>();
+
+function formatters(code: CurrencyCode): Formatters {
+  let f = cache.get(code);
+  if (!f) {
+    const money = (opts: Intl.NumberFormatOptions) => new Intl.NumberFormat('en-US', { style: 'currency', currency: code, ...opts });
+    // Yen and similar have no minor unit: never show cents for them.
+    const digits = money({}).resolvedOptions().maximumFractionDigits ?? 2;
+    f = {
+      big: money({ maximumFractionDigits: 0 }),
+      normal: money({ minimumFractionDigits: digits, maximumFractionDigits: digits }),
+      small: money({ maximumSignificantDigits: 4 }),
+      compact: money({ notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 2 }),
+    };
+    cache.set(code, f);
+  }
+  return f;
+}
+
+/**
+ * A US-dollar amount in the chosen display currency, sized to fit a phone:
+ * $64,211 · $2.50 · $0.00001234 (or €59,034 · ¥9,612,345 …).
+ */
+export function formatPrice(usd: number | null | undefined): string {
+  if (usd == null || !Number.isFinite(usd)) return '—';
+  const { code, rate } = displayCurrency();
+  const n = usd * rate;
+  const f = formatters(code);
+  if (n >= 10_000) return f.big.format(n);
+  if (n >= 1) return f.normal.format(n);
+  return f.small.format(n);
+}
+
+/** A US-dollar amount, shortened: $1.23T · €845.2M */
+export function formatMoneyCompact(usd: number | null | undefined): string {
+  if (usd == null || !Number.isFinite(usd)) return '—';
+  const { code, rate } = displayCurrency();
+  return formatters(code).compact.format(usd * rate);
+}
+
 const compactNum = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 });
-
-/** $64,210 · $2.51 · $0.00001234 */
-export function formatPrice(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return '—';
-  if (n >= 10_000) return big.format(n);
-  if (n >= 1) return normal.format(n);
-  return small.format(n);
-}
-
-/** $1.23T · $845.2M */
-export function formatUsdCompact(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return '—';
-  return compact.format(n);
-}
 
 /** 19.8M */
 export function formatCompact(n: number | null | undefined): string {

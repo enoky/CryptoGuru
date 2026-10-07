@@ -1,6 +1,7 @@
 <script lang="ts">
   import { router } from '../lib/router.svelte';
   import { cycleTheme, theme } from '../lib/theme.svelte';
+  import CurrencyPicker from './CurrencyPicker.svelte';
   import Icon, { type IconName } from './Icon.svelte';
 
   const TABS: { href: string; label: string; icon: IconName; match: string[] }[] = [
@@ -33,9 +34,10 @@
       </li>
     {/each}
   </ul>
+  <div class="mt-auto hidden lg:block"><CurrencyPicker variant="sidebar" /></div>
   <button
     type="button"
-    class="mx-3 mt-auto mb-6 hidden min-h-11 items-center gap-3 rounded-xl px-3 text-muted hover:text-fg lg:flex"
+    class="mx-3 mb-6 hidden min-h-11 items-center gap-3 rounded-xl px-3 text-muted hover:text-fg lg:flex"
     onclick={cycleTheme}>
     <Icon name={theme.choice === 'system' ? 'auto' : theme.choice === 'dark' ? 'moon' : 'sun'} />
     Theme: {theme.choice === 'system' ? 'device' : theme.choice}

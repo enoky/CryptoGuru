@@ -1,12 +1,15 @@
 <script lang="ts">
   import Attribution from '../components/Attribution.svelte';
+  import { install, pwa } from '../lib/pwa.svelte';
+
+  const isIos = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent);
 
   const SECTIONS = [
     {
       title: 'What is CryptoGuru?',
       body: [
         'A free, simple way to follow the most popular crypto assets on your phone: live prices, charts and the key numbers, explained in plain English.',
-        'There is no sign-up and nothing to install. You can add it to your home screen from your browser’s share or menu button.',
+        'There is no sign-up and nothing to download from an app store.',
       ],
     },
     {
@@ -40,6 +43,20 @@
 </script>
 
 <h1 class="text-xl font-bold">About</h1>
+
+{#if !pwa.installed}
+  <section class="mt-4 rounded-2xl border border-line bg-surface p-4" aria-labelledby="install-heading">
+    <h2 id="install-heading" class="font-semibold">Add CryptoGuru to your home screen</h2>
+    <p class="mt-1 text-[15px] text-muted">It opens full-screen like an app, and works without a connection using the last data it saved.</p>
+    {#if pwa.canInstall}
+      <button type="button" class="mt-3 min-h-12 w-full rounded-xl bg-accent font-semibold text-accent-fg" onclick={install}>Install app</button>
+    {:else if isIos}
+      <p class="mt-2 text-[15px]">In Safari, tap the Share button <span aria-hidden="true">(□↑)</span>, then <strong>Add to Home Screen</strong>.</p>
+    {:else}
+      <p class="mt-2 text-[15px]">Open your browser’s menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
+    {/if}
+  </section>
+{/if}
 <div class="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
   {#each SECTIONS as s, i}
     <details open={i === 0} class="group">

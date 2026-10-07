@@ -55,7 +55,11 @@ describe('CoinGecko', () => {
 
   it('reads global stats and trending', async () => {
     const f = mockFetch(healthyRoutes());
-    expect(await coingecko.fetchGlobal(f, o)).toEqual({ totalMarketCap: 2.4e12, marketCapChange24h: 1.2, btcDominance: 56.1 });
+    const g = await coingecko.fetchGlobal(f, o);
+    expect(g).toMatchObject({ totalMarketCap: 2.4e12, marketCapChange24h: 1.2, btcDominance: 56.1 });
+    expect(g.fx!.EUR).toBeCloseTo(0.92);
+    expect(g.fx!.JPY).toBeCloseTo(150);
+    expect(g.fx!.GBP).toBeUndefined(); // not in the response
     expect((await coingecko.fetchTrending(f, o))[0]).toMatchObject({ id: 'ethereum', symbol: 'ETH', rank: 2 });
   });
 
