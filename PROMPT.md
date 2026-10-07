@@ -39,7 +39,7 @@ CryptoGuru gathers current market data on popular crypto assets from public sour
    - graceful degradation: show the last good data with a "data as of HH:MM" stamp, never a blank screen
    - validating API responses so malformed data can't crash the UI
 5. **Recommendation engine:** the exact indicators, formulas, thresholds, and how signals combine into an overall rating. Explain how each rating is shown to users in plain English, and cover the known limitations.
-6. **UI/UX design:** the main screens (dashboard, asset detail, watchlist, about/disclaimer), the key components, mobile-first responsive layout, dark/light themes, accessibility (WCAG 2.1 AA, keyboard navigation, colorblind-safe up/down colors), and loading, empty, and error states.
+6. **UI/UX design:** the main screens (dashboard, asset detail, watchlist, about/disclaimer), the key components, a **mobile-first** layout (designed for a 360–430 px phone used one-handed first, then scaled up to tablet and desktop), dark/light themes, accessibility (WCAG 2.1 AA, keyboard navigation, colorblind-safe up/down colors), and loading, empty, and error states.
 7. **Performance targets:** e.g. first load under 2 s on 4G, a Lighthouse score of 90+, and the refresh interval for each view.
 8. **Testing:** unit tests for the indicator math using known datasets, mocked-API integration tests, and an end-to-end smoke test. Include CI on a free tier (e.g. GitHub Actions).
 9. **Deployment and operations:** step-by-step free deployment, environment configuration, and how you'd notice and respond when an upstream API changes or goes down.

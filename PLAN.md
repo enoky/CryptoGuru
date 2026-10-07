@@ -183,49 +183,72 @@ Technical indicators lag the price and fail in sideways markets. They ignore fun
 
 ---
 
-## 6. UI/UX design
+## 6. UI/UX design (mobile first)
 
-### Screens
-1. **Dashboard** (`#/`)
-   - Market bar: total market cap, 24h change, BTC dominance, and a Fear & Greed gauge.
-   - Watchlist cards, shown first if the user has any.
-   - Top-50 table: rank, name/logo, price, 1h/24h/7d %, market cap, volume, 7d sparkline and a signal badge. Sortable, with search.
-   - Trending strip.
-   - On mobile the table becomes cards with the most important columns, and the rest appears on tap.
+**Phones are the main target.** Every screen is designed for a **360–430 px wide portrait phone** first, used one-handed. Larger screens then get extra room. "Done" for any screen means it looks right and works by thumb on a small phone (iPhone SE / small Android) before anyone looks at the desktop layout.
+
+### Mobile layout rules
+- **Bottom tab bar** with 4 tabs: **Markets · Watchlist · Signals · About**. It sits within thumb reach, respects the iPhone home-indicator safe area (`env(safe-area-inset-bottom)`), and becomes a left sidebar at ≥ 1024 px.
+- **Cards and lists, not tables.** Each coin is one row about 64 px tall: logo, name and ticker; price; 24h % with ▲/▼; a tiny sparkline; and the signal badge. Market cap, volume and other columns live on the asset page, not in the list.
+- **Touch targets of at least 44 × 44 px** with 8 px spacing. No hover-only features: everything a tooltip shows is also reachable by tap (an ⓘ icon opens a short explanation).
+- **One column on phones.** No horizontal scrolling of the page, ever. Sideways scrolling is allowed only inside deliberate strips (trending coins, chart-range chips) that show a partial next item to hint they scroll.
+- **Readable type:** 16 px base text (which also stops iOS zooming into the search box), prices in 17–20 px tabular digits, nothing below 12 px.
+- **Sticky top bar** (about 48 px): app name, search icon and theme toggle. It hides when scrolling down and comes back when scrolling up, to save screen space.
+- **Bottom sheets instead of pop-ups:** sort options, filters, "Why this rating?" and the ⓘ explanations slide up from the bottom and close with a swipe down or the back button.
+- **Gestures are shortcuts only:** pull-to-refresh on lists, and swipe a watchlist row to remove it. Every gesture has a visible button that does the same thing.
+- **Numbers fit:** large values are shortened (`$1.23T`, `$845.2M`), and tiny prices show significant digits (`$0.00001234`) so nothing wraps or gets cut off at 360 px.
+- **The phone back button works as expected:** every screen and open sheet has its own history entry.
+
+### Screens (as seen on a phone)
+1. **Markets** (`#/`, home)
+   - A compact market strip at the top: total market cap and 24h %, BTC dominance, and a small Fear & Greed dial. Tapping it opens a sheet with details.
+   - Watchlist coins first (if any), then the top-50 list as rows (above).
+   - A sort chip ("Sort: Market cap ▾") opens a bottom sheet with market cap / 24h % / 7d % / signal score.
+   - A sideways-scrolling trending strip below the first 10 rows.
 2. **Asset detail** (`#/asset/:id`)
-   - Price header with "as of" time.
-   - Chart with 7D / 30D / 1Y tabs and toggles for SMA50/200 overlays and line/candle view.
-   - Key stats grid: market cap, volume, circulating/max supply, ATH and % from ATH, volatility.
-   - "Why this rating?" panel.
-   - Data source and attribution.
-3. **Watchlist** (`#/watchlist`): add/remove with a star, drag to reorder, and export/import as JSON. Stored only on this device.
-4. **Signals** (`#/signals`): a screener table of scores with the filters above.
-5. **About and disclaimer** (`#/about`): how signals work, their limitations, data sources and attribution, the privacy statement and an FAQ.
+   - Price header with 24h change and an "as of" time.
+   - A full-width chart about 240 px tall with large range chips (**7D · 30D · 1Y**). Touch and drag to see a crosshair with price and date; the page doesn't scroll while you drag on the chart. SMA overlays and candle view sit behind a "Chart options" chip.
+   - The signal summary card: the rating, its confidence and the top 2 reasons, with "See all reasons" opening the full "Why this rating?" sheet.
+   - Key stats as a 2-column grid of small tiles: market cap, volume, supply, ATH and % from ATH, volatility.
+   - A large star button to add to the watchlist, placed at the bottom within thumb reach.
+   - Data source and attribution at the bottom.
+3. **Watchlist** (`#/watchlist`): the same rows as Markets. Swipe or tap ✕ to remove, long-press to reorder, and export/import from the ⋯ menu. Stored only on this device.
+4. **Signals** (`#/signals`): rows sorted by signal score, with filter chips across the top ("Oversold", "Above 200-day avg", "Unusual volume").
+5. **About** (`#/about`): how signals work, limitations, data sources and attribution, privacy and an FAQ, as collapsible sections.
+
+### On larger screens
+- **Tablet (≥ 640 px):** two-column grid of rows; the chart grows to 320 px tall.
+- **Desktop (≥ 1024 px):** sidebar navigation; Markets switches to a full sortable table with extra columns (1h/7d %, market cap, volume); the asset page puts the chart and the "Why this rating?" panel side by side; sheets become side panels.
 
 ### Key components
-`MarketBar`, `AssetTable`/`AssetCard`, `Sparkline`, `PriceChart`, `SignalBadge`, `WhyPanel`, `FreshnessStamp`, `SourceFooter`, `ErrorInline`, `Skeleton`, `DisclaimerBanner`.
+`BottomNav`, `TopBar`, `MarketStrip`, `AssetRow` (phone) / `AssetTable` (desktop), `Sparkline`, `PriceChart`, `RangeChips`, `SignalBadge`, `SignalCard`, `BottomSheet`, `WhySheet`, `StatTile`, `FreshnessStamp`, `SourceFooter`, `ErrorInline`, `Skeleton`, `DisclaimerBanner`.
 
 ### First visit
-A dismissible banner reads "Signals are educational, not financial advice — learn how they work". Tooltips explain every term (RSI, SMA, dominance) in one sentence.
+A small dismissible card above the list reads "Signals are educational, not financial advice — learn how they work". Every term (RSI, SMA, dominance) has an ⓘ that opens a one-sentence explanation in a bottom sheet.
+
+### Installable app (PWA)
+A web app manifest and icons let users "Add to Home Screen" on Android and iOS. It then opens full-screen like a native app, with a matching status-bar color and splash screen. The offline app shell (§4) means it opens instantly, even without signal.
 
 ### Visual design and themes
-- Mobile-first, with breakpoints at 640 / 1024 / 1280 px.
-- Dark and light themes that follow the system setting, plus a manual toggle.
+- Breakpoints at 640 / 1024 / 1280 px, written as `min-width` rules: the phone layout is the default, larger screens are additions.
+- Dark and light themes that follow the system setting, plus a manual toggle. Dark is tuned for night-time phone use (no pure-white text on pure black).
 - Numbers use tabular digits; prices are formatted with `Intl.NumberFormat` (USD default; EUR/GBP selectable in Phase 2).
 
 ### Accessibility (WCAG 2.1 AA)
-- Text contrast of at least 4.5:1.
+- Text contrast of at least 4.5:1, checked in bright-sunlight-friendly light mode too.
 - **Up and down are never shown by color alone**: ▲/▼ arrows and +/− signs always accompany them, and the palette is blue/orange rather than red/green so it works for colorblind users.
-- Full keyboard navigation, visible focus rings, and skip-to-content.
+- Works with VoiceOver and TalkBack: each coin row reads as one item ("Bitcoin, 64,210 dollars, up 2.1 percent, leaning bullish").
+- Layout holds up with phone text size set to 200%.
+- Full keyboard navigation, visible focus rings, and skip-to-content on desktop.
 - Charts have a visually hidden data-table alternative and an `aria-label` summary.
 - Respects `prefers-reduced-motion`. Live price updates are announced politely, and only for watchlisted coins.
 
 ### Loading, empty and error states
-- **Loading:** skeleton rows the same size as the real ones, so the layout doesn't shift.
-- **Empty watchlist:** a short explanation plus suggested coins to add.
+- **Loading:** skeleton rows the same size as the real ones, so nothing jumps around under the user's thumb.
+- **Empty watchlist:** a short explanation plus suggested coins to add with one tap.
 - **No search results:** a link to clear the search.
 - **Error:** an inline message with a Retry button, showing the last good data where it exists.
-- **Offline:** a banner over the cached data.
+- **Offline / weak signal:** a slim banner under the top bar over the cached data.
 
 ---
 
@@ -233,11 +256,13 @@ A dismissible banner reads "Signals are educational, not financial advice — le
 
 | Metric | Target |
 |---|---|
-| First load on 4G (snapshot visible) | < 2 s |
+| First load on a mid-range Android phone over 4G (snapshot visible) | < 2 s |
 | Largest Contentful Paint | < 2.0 s |
 | Cumulative Layout Shift | < 0.05 |
 | JS bundle, initial route | < 120 KB gz (chart library lazy-loaded on the asset page) |
-| Lighthouse (Performance, Accessibility, Best Practices, SEO) | ≥ 90 each, enforced in CI |
+| Lighthouse **mobile** profile (Performance, Accessibility, Best Practices, SEO) | ≥ 90 each, enforced in CI |
+| Scrolling the 50-coin list | 60 fps on a mid-range phone (no jank) |
+| Tap response (Interaction to Next Paint) | < 200 ms |
 | Indicator computation for 50 assets | < 50 ms on a mid-range phone |
 
 How to get there: lazy-load routes and the chart library; serve the snapshot from the Worker as one small JSON (~40 KB gz); self-host coin logos at 32 px via the Worker cache; preconnect to the API origin.
@@ -252,8 +277,10 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | Unit: adapters and schemas | Vitest | Each source's response → internal type; malformed payloads are rejected; sanity checks |
 | Integration | Vitest + MSW | Fetch layer: SWR, backoff, circuit breaker, failover order, stale stamps. The Worker is tested with `wrangler`'s local runtime (Miniflare). |
 | Component | Vitest + Testing Library | SignalBadge text and icons; WhyPanel wording; error/empty states |
-| End-to-end smoke | Playwright (Chromium) | Load the dashboard with mocked APIs → open an asset → switch chart range → add to watchlist → reload and confirm it persisted → simulate the API down and confirm the stale banner appears |
-| Accessibility | `@axe-core/playwright` | No serious or critical violations on each screen |
+| End-to-end smoke | Playwright, run at **phone sizes first** (iPhone SE 375 px, Pixel 7 412 px with touch enabled), then desktop | Check there's no horizontal scrolling and that tap targets are at least 44 px. Load the dashboard with mocked APIs → open an asset → switch chart range → add to watchlist → reload and confirm it persisted → simulate the API down and confirm the stale banner appears |
+| Accessibility | `@axe-core/playwright` | No serious or critical violations on each screen, at phone and desktop sizes |
+| Visual | Playwright screenshots at 360 px and 412 px | Catch text wrapping, cut-off numbers and overlap on small screens |
+| Real devices | Manual, before each release | One iPhone (Safari) and one mid-range Android (Chrome): scrolling, chart touch, bottom sheets, back button, Add to Home Screen |
 | Performance | Lighthouse CI | Budgets from §7 |
 
 **CI on GitHub Actions (free for public repos):** on every PR, run lint, typecheck, unit/integration tests, build, Playwright and Lighthouse CI. A **nightly "live contract" job** calls each real API once and validates it against the schemas, giving early warning of upstream changes.
@@ -300,10 +327,10 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | Phase | Scope | Effort (1 dev) | Acceptance criteria |
 |---|---|---|---|
 | **0: Setup** | Repo, Vite/Svelte/TS, Tailwind, lint, CI, Pages and Worker hello-world, schemas for every source | 2–3 days | CI is green; a preview deploys on each PR; `/api/health` responds |
-| **1: MVP** | Worker cron and snapshot, prices and candles endpoints with failover; dashboard (market bar, top-50 table, sparklines); asset page with 7D/30D/1Y chart; local watchlist; freshness stamps; disclaimer and About page; dark/light themes | 2–3 weeks | Works on mobile and desktop; Lighthouse ≥ 90; with the primary source blocked in tests, data still loads from the fallback; with every source blocked, the last good data shows with a stale banner; no console errors |
-| **2: v1 Signals** | Indicator module with tests; SignalBadge, WhyPanel, Signals screener; Fear & Greed and trending widgets; offline app shell; accessibility pass with axe; currency selector | 1.5–2 weeks | Indicator tests match the reference fixtures to within 0.01; every rating explains every indicator in plain English; no serious axe violations |
+| **1: MVP** | Worker cron and snapshot, prices and candles endpoints with failover; dashboard (market bar, top-50 table, sparklines); asset page with 7D/30D/1Y chart; local watchlist; freshness stamps; disclaimer and About page; dark/light themes | 2–3 weeks | Every screen works one-handed on a 360 px phone with no horizontal scrolling; then also on desktop; Lighthouse mobile ≥ 90; with the primary source blocked in tests, data still loads from the fallback; with every source blocked, the last good data shows with a stale banner; no console errors |
+| **2: v1 Signals** | Indicator module with tests; SignalBadge, SignalCard and WhySheet, Signals screener; Fear & Greed and trending widgets; offline app shell and Add to Home Screen (PWA); accessibility pass with axe; currency selector | 1.5–2 weeks | Indicator tests match the reference fixtures to within 0.01; every rating explains every indicator in plain English; no serious axe violations |
 | **3: Polish and trust** | Signal backtest page (how often each signal was followed by a rise or fall); watchlist export/import; optional cookieless analytics; nightly contract job opening issues; news feed only if a source with suitable terms is found | 1.5–2 weeks | The backtest reproduces the documented results; a contract failure opens an issue within 24 h |
-| **Later** | Price alerts in the browser (Notification API while the tab is open); PWA install; more currencies and languages | — | — |
+| **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
 
