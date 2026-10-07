@@ -17,6 +17,13 @@
       ],
     },
     {
+      title: 'How do signals work?',
+      body: [
+        'Each coin gets six simple checks on its daily prices: its long-term trend (price against the 200-day average), the 50-day against the 200-day average, momentum (MACD), RSI, trading volume, and the market-wide Fear & Greed Index. Each check is bullish, bearish or neutral, and they combine into a score from −100 to +100.',
+        'Every rating lists every check behind it in plain English, so you can see exactly why. The checks only look at past prices and volume: they ignore news, fundamentals and regulation, they lag behind the price, and they often fail in sideways markets. They are not predictions.',
+      ],
+    },
+    {
       title: 'Privacy',
       body: [
         'No accounts, no cookies, no tracking and no ads. Your watchlist and settings are stored only on this device.',

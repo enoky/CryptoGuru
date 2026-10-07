@@ -1,7 +1,7 @@
 import * as v from 'valibot';
 import { fetchJson, type FetchFn } from '../http';
 import type { Candle, LivePrice, Range } from '../types';
-import { isPositive, numeric, parseItems } from '../validate';
+import { isPositive, numeric, parseItems, parseNumericRows } from '../validate';
 
 /**
  * Binance's public market-data mirror. Unlike api.binance.com it isn't
@@ -36,15 +36,16 @@ const KLINES: Record<Range, { interval: string; limit: number }> = {
   '1y': { interval: '1d', limit: 365 },
 };
 
-const KlineSchema = v.pipe(
-  v.array(v.union([v.string(), v.number()])),
-  v.minLength(6),
-  v.transform((k) => k.map(Number)),
-);
-
-export async function fetchCandles(fetchFn: FetchFn, symbol: string, range: Range, o: { retries?: number; baseDelayMs?: number } = {}): Promise<Candle[]> {
+/** `days` overrides how many daily candles to fetch for the 1y range. */
+export async function fetchCandles(
+  fetchFn: FetchFn,
+  symbol: string,
+  range: Range,
+  o: { retries?: number; baseDelayMs?: number; days?: number } = {},
+): Promise<Candle[]> {
   if (!hasUsdtPair(symbol)) throw new Error(`Binance: no USDT pair for ${symbol}`);
-  const { interval, limit } = KLINES[range];
+  const { interval } = KLINES[range];
+  const limit = range === '1y' && o.days ? o.days : KLINES[range].limit;
   const raw = await fetchJson(fetchFn, `${BINANCE_BASE}/klines?symbol=${symbol}USDT&interval=${interval}&limit=${limit}`, o);
-  return parseItems(KlineSchema, raw, 'Binance klines').map(([t, op, h, l, c, vol]) => ({ t, o: op, h, l, c, v: vol }));
+  return parseNumericRows(raw, 6, 'Binance klines').map(([t, op, h, l, c, vol]) => ({ t, o: op, h, l, c, v: vol }));
 }

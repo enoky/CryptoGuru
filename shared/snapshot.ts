@@ -9,8 +9,9 @@ import type { Asset, Part, PriceMap, Snapshot, SourceName } from './types';
 /** How often each part of the snapshot is refreshed. */
 export const REFRESH_MS = {
   markets: 10 * 60_000,
+  sparklines: 60 * 60_000,
   global: 30 * 60_000,
-  trending: 60 * 60_000,
+  trending: 120 * 60_000,
   fearGreed: 60 * 60_000,
 } as const;
 
@@ -46,7 +47,7 @@ export async function buildSnapshot(prev: Snapshot, fetchFn: FetchFn, breaker: C
   const errors: BuildResult['errors'] = [];
 
   async function refresh<K extends PartKey>(key: K, attempts: Attempt<NonNullable<Snapshot[K]>['data'], SourceName>[]) {
-    if (!o.force && !due(prev[key], REFRESH_MS[key], o.now)) return;
+    if (!o.force && !due(prev[key] ?? null, REFRESH_MS[key], o.now)) return;
     try {
       const { value, source } = await firstSuccessful(attempts, breaker);
       next[key] = { data: value, asOf: o.now, source } as Snapshot[K];
@@ -61,6 +62,7 @@ export async function buildSnapshot(prev: Snapshot, fetchFn: FetchFn, breaker: C
       { name: 'coingecko', run: () => coingecko.fetchMarkets(fetchFn, cg) },
       { name: 'coinpaprika', run: async () => keepExtras(await coinpaprika.fetchMarkets(fetchFn, net), prev.markets?.data) },
     ]),
+    refresh('sparklines', [{ name: 'coingecko', run: () => coingecko.fetchSparklines(fetchFn, cg) }]),
     refresh('global', [
       { name: 'coingecko', run: () => coingecko.fetchGlobal(fetchFn, cg) },
       { name: 'coinpaprika', run: () => coinpaprika.fetchGlobal(fetchFn, net) },
@@ -87,6 +89,14 @@ function keepExtras(assets: Asset[], previous: Asset[] | undefined): Asset[] {
 
 export async function fetchLivePrices(fetchFn: FetchFn, now: number, baseDelayMs?: number): Promise<PriceMap> {
   return { prices: await binance.fetchTickers(fetchFn, { baseDelayMs }), asOf: now, source: 'binance' };
+}
+
+/** Snapshot assets with their sparklines filled in. */
+export function withSparklines(snapshot: Snapshot): Asset[] {
+  const lines = snapshot.sparklines?.data;
+  const assets = snapshot.markets?.data ?? [];
+  if (!lines) return assets;
+  return assets.map((a) => (lines[a.id] ? { ...a, sparkline: lines[a.id] } : a));
 }
 
 /**

@@ -91,8 +91,10 @@ Alternative considered: a GitHub Actions cron that commits JSON to GitHub Pages.
 |---|---|---|---|
 | Live prices (Binance ticker) | 30 s | 30 s | every 60 s while the tab is visible |
 | Markets snapshot (CoinGecko) | cron every 10 min | 5 min | on focus / every 5 min |
+| Sparklines (7-day) | cron hourly | with snapshot | with snapshot |
+| Signal ratings | each coin re-rated every ~2 h, in batches of 8 every 10 min | 10 min | every 10 min while visible |
 | Global stats | cron every 30 min | 15 min | every 15 min |
-| Trending | cron every 60 min | 30 min | on load |
+| Trending | cron every 2 h | 30 min | on load |
 | Fear & Greed | cron every 60 min | 1 h | on load |
 | Hourly candles (7d) | 15 min | 15 min | on opening an asset |
 | Daily candles (1y) | 1 h | 6 h (IndexedDB) | on opening an asset |
@@ -103,13 +105,23 @@ Every layer uses **stale-while-revalidate**: return the cached value immediately
 
 | Upstream call | Frequency | Calls/month |
 |---|---|---|
-| CoinGecko `/coins/markets` (top 100, one page) | 144/day | ~4,460 |
+| CoinGecko `/coins/markets` without sparklines | 144/day | ~4,460 |
+| CoinGecko `/coins/markets` with sparklines (hourly) | 24/day | ~740 |
 | CoinGecko `/global` | 48/day | ~1,490 |
-| CoinGecko `/search/trending` | 24/day | ~740 |
-| CoinGecko candle fallbacks (≈10 non-Binance coins × 4/day) | 40/day | ~1,240 |
-| **CoinGecko total** | | **~7,930 / 10,000** ⚠ |
-| KV writes (markets + global + trending + F&G + pair map) | ~240/day | under the 1,000/day limit ⚠ |
+| CoinGecko `/search/trending` (every 2 h) | 12/day | ~370 |
+| CoinGecko candle fallbacks (charts, ≈10 non-Binance coins × 4/day) | 40/day | ~1,240 |
+| CoinGecko candles for signals (coins on neither Binance nor Kraken, twice a day) | ≈20/day | ~600 |
+| **CoinGecko total** | | **~8,900 / 10,000** ⚠ |
+| Binance/Kraken daily candles for signals | ~8 per 10 min | free, weight-limited |
+| KV writes (snapshot ≤144 + signals ≤144 per day) | ≤ ~290/day | under the 1,000/day limit ⚠ |
 | Worker requests | grow with traffic | the free tier is 100k/day ⚠, enough for roughly 5–10k daily visitors |
+
+### Free-plan limits per Worker run
+
+Each run (a request or a cron firing) may make **50 outbound requests** and use **10 ms of CPU** (time spent waiting on the network doesn't count) ([Cloudflare limits](https://developers.cloudflare.com/workers/platform/limits/)). So:
+- Two cron triggers, each with its own allowance: `*/10` refreshes the snapshot, `5-59/10` rates a batch of coins.
+- Every cron run uses a request budget of 45 and stops early when fewer than 3 remain.
+- Measured locally: the market list without sparklines takes ~1 ms; with sparklines ~4–5 ms (so they are fetched only hourly); a batch of 8 coins with 250 daily candles each takes ~3–7 ms. ⚠ Check CPU time in the Cloudflare dashboard after deploying and lower `BATCH` in `worker/signals.ts` if runs are cut off.
 
 If KV or Worker limits are hit, the app automatically switches to its browser-direct fallback.
 
@@ -152,6 +164,11 @@ All signals come from **daily closes (up to 365)** plus volume, with no machine 
 
 **Context only, not scored:** 30-day annualized volatility (`stdev(ln returns) × √365`) labeled Low < 40%, Medium 40–80%, High > 80%. Also distance from all-time high, and 1h/24h/7d/30d returns.
 
+### Where signals are computed
+- **Signals screen (all coins):** the Worker rates ~90 coins (stablecoins excluded) in batches of 8 per 10-minute cron run, stalest first, from 250 daily candles each (Binance → Kraken → CoinGecko, with CoinGecko used at most twice a day per coin). Results live in KV and are served from `/api/signals`.
+- **Coin page:** the browser works out the coin's rating from the same 1-year daily candles it already downloads for the chart and volatility, using the same shared code. If that fails, it shows the server's rating.
+- The rules live in `shared/signals.ts`; the plain-English sentences in `src/lib/explain.ts`. Tests check RSI against a published worked example and MACD against a case with an exact answer.
+
 ### Combining signals
 - `score = Σ(weightᵢ × signalᵢ) / Σ(weightᵢ of indicators that had enough data) × 100`, giving a range of −100 to +100.
 - **Overall rating:**
@@ -164,7 +181,7 @@ All signals come from **daily closes (up to 365)** plus volume, with no machine 
   | −49 to −15 | Leaning bearish |
   | ≤ −50 | Strong bearish signals |
 
-- **Confidence** (High / Medium / Low): the share of non-neutral indicators that agree with the overall direction (≥ 75% High, ≥ 50% Medium), lowered one level if volatility is High or if fewer than 5 indicators had enough data.
+- **Confidence** (High / Medium / Low): the share of non-neutral indicators that agree with the overall direction (≥ 75% High, ≥ 50% Medium); for a Mixed rating, the share of indicators that are themselves neutral. Lowered one level if volatility is High or if fewer than 5 indicators had enough data. Coins with fewer than 3 usable indicators aren't rated.
 - **Wording rules:** never say "buy" or "sell", never predict a price, and always phrase signals as past behavior ("has been", "is above").
 
 ### How a rating is shown
@@ -204,7 +221,7 @@ Technical indicators lag the price and fail in sideways markets. They ignore fun
 ### Screens (as seen on a phone)
 1. **Markets** (`#/`, home)
    - A compact market strip at the top: total market cap and 24h %, BTC dominance, and a small Fear & Greed dial. Tapping it opens a sheet with details.
-   - Watchlist coins first (if any), then the top-50 list as rows (above).
+   - Watchlist coins first (if any), then the top-50 list as rows (above). Signal badges appear in the rows on desktop only; on phones they would crowd the name, so ratings live on the Signals tab and coin pages, and Markets can be sorted by signal score.
    - A sort chip ("Sort: Market cap ▾") opens a bottom sheet with market cap / 24h % / 7d % / signal score.
    - A sideways-scrolling trending strip below the first 10 rows.
 2. **Asset detail** (`#/asset/:id`)
@@ -335,7 +352,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
 
-**Status (MVP build):** Phases 0 and 1 are built and tested against mocked APIs: Worker with cron snapshot, failover and caching; Markets, coin, Watchlist and About screens; phone-first layout; 53 unit tests and 40 browser tests across 360/375/412 px phones and desktop. Not yet verified against the live APIs or deployed. Remaining from Phase 1: Lighthouse CI budgets, and pull-to-refresh/swipe gestures (the visible buttons are in place). Next: Phase 2 (signals, PWA offline shell).
+**Status:** Phases 0 and 1 (MVP) are built and tested against mocked APIs. Phase 2 signals are built: indicator maths and rules with tests, the Worker's batch rating job and `/api/signals`, the coin-page signal card and "Why this rating?" sheet, the Signals screener with filters, and sorting Markets by signal score (90 unit tests, 60 browser tests). Still to do in Phase 2: offline app shell (service worker) and the currency selector. Nothing has been verified against the live APIs or deployed yet. Remaining from Phase 1: Lighthouse CI budgets and pull-to-refresh/swipe gestures.
 
 ---
 

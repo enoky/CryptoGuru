@@ -25,7 +25,8 @@ const MarketSchema = v.object({
   price_change_percentage_1h_in_currency: num,
   price_change_percentage_24h_in_currency: num,
   price_change_percentage_7d_in_currency: num,
-  sparkline_in_7d: v.nullish(v.object({ price: v.array(v.nullable(v.number())) })),
+  // Checked by hand below (isPositive): validating 100 × 168 numbers by schema costs too much CPU in the Worker.
+  sparkline_in_7d: v.nullish(v.object({ price: v.array(v.unknown()) })),
 });
 
 const GlobalSchema = v.object({
@@ -70,12 +71,11 @@ const get = (fetchFn: FetchFn, path: string, o: CoinGeckoOptions) =>
     baseDelayMs: o.baseDelayMs,
   });
 
-export async function fetchMarkets(fetchFn: FetchFn, o: CoinGeckoOptions = {}): Promise<Asset[]> {
-  const raw = await get(
-    fetchFn,
-    '/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true&price_change_percentage=1h%2C24h%2C7d',
-    o,
-  );
+const MARKETS_PATH = '/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=1h%2C24h%2C7d';
+
+/** Top 100 coins. Without sparklines (the default) the response is ~8× smaller and much cheaper to validate. */
+export async function fetchMarkets(fetchFn: FetchFn, o: CoinGeckoOptions & { sparkline?: boolean } = {}): Promise<Asset[]> {
+  const raw = await get(fetchFn, `${MARKETS_PATH}&sparkline=${o.sparkline ? 'true' : 'false'}`, o);
   const items = parseItems(MarketSchema, raw, 'CoinGecko markets');
   return items
     .filter((m) => isPositive(m.current_price))
@@ -96,8 +96,17 @@ export async function fetchMarkets(fetchFn: FetchFn, o: CoinGeckoOptions = {}): 
       maxSupply: finiteOrNull(m.max_supply),
       ath: finiteOrNull(m.ath),
       athChangePct: finiteOrNull(m.ath_change_percentage),
-      sparkline: downsample((m.sparkline_in_7d?.price ?? []).filter(isPositive), 42),
+      sparkline: downsample((m.sparkline_in_7d?.price ?? []).filter(isPositive) as number[], 42),
     }));
+}
+
+/** 7-day sparklines for the top 100, by id, downsampled to 42 points. */
+export async function fetchSparklines(fetchFn: FetchFn, o: CoinGeckoOptions = {}): Promise<Record<string, number[]>> {
+  const assets = await fetchMarkets(fetchFn, { ...o, sparkline: true });
+  const out: Record<string, number[]> = {};
+  for (const a of assets) if (a.sparkline.length > 1) out[a.id] = a.sparkline;
+  if (Object.keys(out).length === 0) throw new Error('CoinGecko: no sparklines');
+  return out;
 }
 
 export async function fetchGlobal(fetchFn: FetchFn, o: CoinGeckoOptions = {}): Promise<GlobalStats> {
@@ -125,8 +134,9 @@ export async function fetchTrending(fetchFn: FetchFn, o: CoinGeckoOptions = {}):
 const DAYS: Record<Range, string> = { '7d': '7', '30d': '30', '1y': '365&interval=daily' };
 
 /** CoinGecko only gives prices, not OHLC, so each candle is flat (o = h = l = c). */
-export async function fetchCandles(fetchFn: FetchFn, id: string, range: Range, o: CoinGeckoOptions = {}): Promise<Candle[]> {
-  const raw = await get(fetchFn, `/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${DAYS[range]}`, o);
+export async function fetchCandles(fetchFn: FetchFn, id: string, range: Range, o: CoinGeckoOptions & { days?: number } = {}): Promise<Candle[]> {
+  const days = range === '1y' && o.days ? `${o.days}&interval=daily` : DAYS[range];
+  const raw = await get(fetchFn, `/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}`, o);
   const chart = parseOne(ChartSchema, raw, 'CoinGecko chart');
   const volumes = new Map(chart.total_volumes.map(([t, vol]) => [t, vol ?? 0]));
   return chart.prices

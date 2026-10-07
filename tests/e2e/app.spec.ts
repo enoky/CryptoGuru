@@ -155,11 +155,82 @@ test('with no API and nothing saved, a clear error offers a retry', async ({ pag
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 });
 
-test('other tabs render', async ({ page }) => {
-  await page.goto('/#/signals');
-  await expect(page.getByRole('heading', { name: 'Signals' })).toBeVisible();
+test('about page renders', async ({ page }) => {
   await page.goto('/#/about');
   await expect(page.getByText('Not financial advice', { exact: false }).first()).toBeVisible();
   await expectNoHorizontalScroll(page);
   await axe(page);
+});
+
+test('signals screener lists, filters and explains ratings', async ({ page }) => {
+  await page.goto('/#/signals');
+  await expect(page.getByRole('heading', { name: 'Signals', level: 1 })).toBeVisible();
+  const rows = page.locator('main ul a[href^="#/asset/"]');
+  await expect(rows.first()).toBeVisible();
+  const total = await rows.count();
+  expect(total).toBeGreaterThan(40);
+  await expect(page.getByRole('link', { name: /^Tether:/ })).toHaveCount(0); // stablecoins aren't rated
+  await expectNoHorizontalScroll(page);
+  await expectTapTargets(page);
+  await axe(page);
+
+  await page.getByRole('button', { name: 'Bearish', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Bearish', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const bearish = await rows.count();
+  expect(bearish).toBeGreaterThan(0);
+  expect(bearish).toBeLessThan(total);
+  for (const label of await rows.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))) {
+    expect(label).toMatch(/bearish/i);
+  }
+
+  await page.getByRole('button', { name: 'How signals work' }).click();
+  await expect(page.getByRole('dialog', { name: 'How signals work' })).toContainText('Long-term trend');
+  await page.goBack();
+  await expect(page.getByRole('dialog', { name: 'How signals work' })).toBeHidden();
+});
+
+test('coin page shows its signal with plain-English reasons', async ({ page }) => {
+  await page.goto('/#/asset/bitcoin');
+  const card = page.getByRole('region', { name: 'Signals' });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText(/Strong bullish signals|Leaning bullish|Mixed \/ neutral|Leaning bearish|Strong bearish signals/);
+  await expect(card).toContainText('confidence');
+  await expect(card.getByRole('img', { name: /^Score/ })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await expectTapTargets(page);
+
+  await card.getByRole('button', { name: 'See all reasons' }).click();
+  const why = page.getByRole('dialog', { name: 'Why this rating?' });
+  await expect(why).toBeVisible();
+  // The sheet must sit flush with the bottom of the screen (regression: hidden text once made it scroll up).
+  await page.waitForTimeout(300);
+  const gap = await page.evaluate(() => window.innerHeight - document.querySelector('dialog[open] .sheet-panel')!.getBoundingClientRect().bottom);
+  expect(gap).toBeLessThan(1);
+  for (const name of ['Long-term trend', '50/200-day averages', 'Momentum (MACD)', 'RSI (14 days)', 'Trading volume', 'Market mood']) {
+    await expect(why).toContainText(name);
+  }
+  await expect(why).toContainText('not predictions or financial advice');
+  await expect(why).not.toContainText(/\b(buy|sell)\b/i);
+  await axe(page);
+});
+
+test('stablecoins say why they are not rated', async ({ page }) => {
+  await page.goto('/#/asset/tether');
+  await expect(page.getByText(/is a stablecoin/)).toBeVisible();
+});
+
+test('if the ratings service is down, coin pages still work out their own signal', async ({ page }) => {
+  await page.unrouteAll();
+  await mockApi(page, { signalsDown: true });
+  await page.goto('/#/signals');
+  await expect(page.getByRole('alert')).toContainText('Signals are unavailable right now', { timeout: 15_000 });
+  await page.goto('/#/asset/ethereum');
+  await expect(page.getByRole('button', { name: 'See all reasons' })).toBeVisible();
+});
+
+test('markets can be sorted by signal score', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Change sort/ }).click();
+  await page.getByRole('radio', { name: 'Signal score' }).click();
+  await expect(page.getByRole('heading', { name: 'Sorted by signal score' })).toBeVisible();
 });

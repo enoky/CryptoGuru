@@ -5,6 +5,7 @@
   let { open = $bindable(false), title, children }: { open?: boolean; title: string; children: Snippet } = $props();
 
   let dialog: HTMLDialogElement;
+  let closeButton: HTMLButtonElement;
   /** Whether we added a history entry, so the phone's back button closes the sheet. */
   let pushed = false;
   const titleId = `sheet-${Math.random().toString(36).slice(2, 8)}`;
@@ -12,6 +13,9 @@
   $effect(() => {
     if (open && !dialog.open) {
       dialog.showModal();
+      // Otherwise the browser focuses the first link, which may be at the bottom and scrolls the sheet.
+      closeButton.focus({ preventScroll: true });
+      dialog.scrollTop = 0;
       history.pushState({ sheet: titleId }, '');
       pushed = true;
     } else if (!open && dialog.open) {
@@ -63,12 +67,17 @@
       <div class="mx-auto mt-2 h-1.5 w-10 rounded-full bg-line lg:hidden"></div>
       <div class="flex items-center justify-between gap-2 py-1 pr-1 pl-5">
         <h2 id={titleId} class="text-lg font-semibold">{title}</h2>
-        <button type="button" class="grid size-11 place-items-center rounded-full text-muted hover:bg-surface-2" onclick={close} aria-label="Close">
+        <button
+          bind:this={closeButton}
+          type="button"
+          class="grid size-11 place-items-center rounded-full text-muted hover:bg-surface-2"
+          onclick={close}
+          aria-label="Close">
           <Icon name="close" />
         </button>
       </div>
     </div>
-    <div class="max-h-[75dvh] overflow-y-auto px-5 pb-[calc(20px+env(safe-area-inset-bottom))] lg:max-h-none lg:flex-1">
+    <div class="relative max-h-[75dvh] overflow-y-auto px-5 pb-[calc(20px+env(safe-area-inset-bottom))] lg:max-h-none lg:flex-1">
       {@render children()}
     </div>
   </div>
@@ -84,11 +93,15 @@
     border: 0;
     background: transparent;
     color: inherit;
+    /* Only the content area scrolls; the sheet itself stays pinned to the bottom. */
+    overflow: hidden;
   }
   .sheet::backdrop {
     background: rgb(0 0 0 / 0.45);
   }
   .sheet-panel {
+    /* Contain absolutely positioned descendants (e.g. screen-reader-only text) so the dialog itself never scrolls. */
+    position: relative;
     background: var(--surface);
     border-radius: 20px 20px 0 0;
     box-shadow: 0 -8px 30px rgb(0 0 0 / 0.2);

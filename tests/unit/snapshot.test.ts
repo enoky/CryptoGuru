@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fetchCandleSet } from '../../shared/candles';
 import { CircuitBreaker } from '../../shared/failover';
-import { buildSnapshot, REFRESH_MS, withLivePrices } from '../../shared/snapshot';
+import { buildSnapshot, REFRESH_MS, withLivePrices, withSparklines } from '../../shared/snapshot';
 import { BINANCE_BASE } from '../../shared/sources/binance';
 import { COINGECKO_BASE } from '../../shared/sources/coingecko';
 import { emptySnapshot } from '../../shared/types';
@@ -15,7 +15,9 @@ describe('buildSnapshot', () => {
   it('fills every part from the primary sources', async () => {
     const { snapshot, refreshed, errors } = await buildSnapshot(emptySnapshot(), mockFetch(healthyRoutes()), new CircuitBreaker(), opts);
     expect(errors).toEqual([]);
-    expect(refreshed.sort()).toEqual(['fearGreed', 'global', 'markets', 'trending']);
+    expect(refreshed.sort()).toEqual(['fearGreed', 'global', 'markets', 'sparklines', 'trending']);
+    expect(snapshot.markets!.data[0].sparkline).toEqual([]);
+    expect(withSparklines(snapshot)[0].sparkline).toHaveLength(42);
     expect(snapshot.markets).toMatchObject({ source: 'coingecko', asOf: NOW });
     expect(snapshot.fearGreed?.source).toBe('alternative.me');
   });
@@ -27,9 +29,9 @@ describe('buildSnapshot', () => {
     const { snapshot } = await buildSnapshot(first.snapshot, down, new CircuitBreaker(), { ...opts, now: later });
     expect(snapshot.markets?.source).toBe('coinpaprika');
     expect(snapshot.global?.source).toBe('coinpaprika');
-    const btc = snapshot.markets!.data.find((a) => a.id === 'bitcoin')!;
+    const btc = withSparklines(snapshot).find((a) => a.id === 'bitcoin')!;
     expect(btc.price).toBe(63900);
-    expect(btc.sparkline).toHaveLength(42);
+    expect(btc.sparkline).toHaveLength(42); // kept from the last good sparklines
     expect(btc.image).toContain('coingecko');
     // Trending has no fallback, so the last good value is kept.
     expect(snapshot.trending?.asOf).toBe(NOW);
@@ -42,7 +44,7 @@ describe('buildSnapshot', () => {
       now: NOW + REFRESH_MS.trending,
     });
     expect(refreshed).toEqual([]);
-    expect(errors.map((e) => e.part).sort()).toEqual(['fearGreed', 'global', 'markets', 'trending']);
+    expect(errors.map((e) => e.part).sort()).toEqual(['fearGreed', 'global', 'markets', 'sparklines', 'trending']);
     expect(snapshot).toEqual(first.snapshot);
   });
 

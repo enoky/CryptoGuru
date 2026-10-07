@@ -13,15 +13,20 @@
   import { assets, market, refresh } from '../lib/market.svelte';
   import { sourceLabel } from '../lib/format';
   import { lsGet, lsSet } from '../lib/storage';
+  import { signalsState, startSignals } from '../lib/signals.svelte';
   import { watchlist } from '../lib/watchlist.svelte';
 
-  type SortKey = 'rank' | 'change24h' | 'change7d' | 'name';
+  type SortKey = 'rank' | 'change24h' | 'change7d' | 'signal' | 'name';
   const SORTS: { key: SortKey; label: string }[] = [
     { key: 'rank', label: 'Market cap' },
     { key: 'change24h', label: '24h change' },
     { key: 'change7d', label: '7d change' },
+    { key: 'signal', label: 'Signal score' },
     { key: 'name', label: 'Name' },
   ];
+
+  void startSignals();
+  const signalOf = (id: string) => signalsState.doc?.items[id];
 
   let query = $state('');
   let sort = $state<SortKey>(lsGet<SortKey>('markets:sort', 'rank'));
@@ -38,6 +43,7 @@
     const by = (f: (a: Asset) => number | null) => (a: Asset, b: Asset) => (f(b) ?? -Infinity) - (f(a) ?? -Infinity);
     if (sort === 'change24h') list.sort(by((a) => a.change24h));
     else if (sort === 'change7d') list.sort(by((a) => a.change7d));
+    else if (sort === 'signal') list.sort(by((a) => signalOf(a.id)?.score ?? null));
     else if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
     else list.sort((a, b) => a.rank - b.rank);
     return list;
@@ -115,7 +121,7 @@
         <a href="#/watchlist" class="inline-flex min-h-11 items-center text-sm font-medium text-accent">Edit</a>
       </div>
       <ul class="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
-        {#each watched as a (a.id)}<li><AssetRow asset={a} /></li>{/each}
+        {#each watched as a (a.id)}<li><AssetRow asset={a} signal={signalOf(a.id)} /></li>{/each}
       </ul>
     </section>
   {/if}
@@ -132,7 +138,7 @@
     {:else}
       <ul class="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
         {#each visible as a, i (a.id)}
-          <li><AssetRow asset={a} /></li>
+          <li><AssetRow asset={a} signal={signalOf(a.id)} /></li>
           {#if i === 9 && !q && sort === 'rank' && trending.length >= 2}
             <li class="bg-surface-2/50 py-3" aria-label="Trending">
               <h3 class="mb-2 px-4 text-sm font-semibold">Trending in the top 100</h3>

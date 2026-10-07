@@ -1,11 +1,14 @@
 <script lang="ts">
+  import type { CoinSignal } from '../../shared/signals';
   import type { Asset } from '../../shared/types';
   import { direction, formatPct, formatPrice, formatUsdCompact } from '../lib/format';
   import ChangeText from './ChangeText.svelte';
   import Logo from './Logo.svelte';
+  import SignalBadge from './SignalBadge.svelte';
   import Sparkline from './Sparkline.svelte';
 
-  let { asset: a }: { asset: Asset } = $props();
+  /** `signal` shows as a column on desktop only; phones keep rows uncluttered (ratings are on the Signals tab). */
+  let { asset: a, signal }: { asset: Asset; signal?: CoinSignal } = $props();
 
   const spoken = $derived.by(() => {
     const d = direction(a.change24h);
@@ -27,6 +30,7 @@
   <div class="hidden text-right tabular-nums lg:block"><ChangeText value={a.change7d} /></div>
   <div class="hidden text-right tabular-nums lg:block">{formatUsdCompact(a.marketCap)}</div>
   <div class="hidden text-right tabular-nums lg:block">{formatUsdCompact(a.volume24h)}</div>
+  <div class="hidden lg:block">{#if signal}<SignalBadge {signal} />{/if}</div>
   <div class="min-w-[5.5rem] text-right">
     <div class="text-[17px] font-semibold tabular-nums">{formatPrice(a.price)}</div>
     <ChangeText value={a.change24h} class="text-sm" />
@@ -39,7 +43,7 @@
   }
   @media (min-width: 1024px) {
     .row {
-      grid-template-columns: auto minmax(0, 1fr) 64px 5.5rem 6.5rem 6.5rem 7.5rem;
+      grid-template-columns: auto minmax(0, 1fr) 64px 5.5rem 6.5rem 6.5rem 8.5rem 7.5rem;
     }
   }
 </style>

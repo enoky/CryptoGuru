@@ -17,8 +17,10 @@ describe('CoinGecko', () => {
       ['ethereum', 'ETH', 2],
       ['tether', 'USDT', 3],
     ]);
-    expect(assets[0].sparkline).toHaveLength(42);
+    expect(assets[0].sparkline).toEqual([]); // not requested by default
     expect(assets[0].maxSupply).toBeNull();
+    const lines = await coingecko.fetchSparklines(mockFetch(healthyRoutes()), o);
+    expect(lines.bitcoin).toHaveLength(42);
   });
 
   it('drops coins with bad prices and non-https images', async () => {

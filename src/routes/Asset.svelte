@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { annualizedVolatility, volatilityLabel } from '../../shared/series';
+  import { computeSignal, isStablecoin } from '../../shared/signals';
   import { RANGES, type CandleSet, type Range } from '../../shared/types';
   import Attribution from '../components/Attribution.svelte';
   import ChangeText from '../components/ChangeText.svelte';
@@ -8,12 +9,16 @@
   import Icon from '../components/Icon.svelte';
   import Logo from '../components/Logo.svelte';
   import PriceChart from '../components/PriceChart.svelte';
+  import SignalCard from '../components/SignalCard.svelte';
   import StatTile from '../components/StatTile.svelte';
   import { formatCompact, formatPct, formatPrice, formatTime, formatUsdCompact, sourceLabel } from '../lib/format';
   import { findAsset, getCandles, market } from '../lib/market.svelte';
   import { back } from '../lib/router.svelte';
   import { lsGet, lsSet } from '../lib/storage';
+  import { signalsState, startSignals } from '../lib/signals.svelte';
   import { isWatched, toggleWatch } from '../lib/watchlist.svelte';
+
+  void startSignals();
 
   let { id }: { id: string } = $props();
 
@@ -24,7 +29,6 @@
   let chart = $state<CandleSet | null>(null);
   let chartError = $state<string | null>(null);
   let chartLoading = $state(false);
-  let volatility = $state<number | null>(null);
   let retryCount = $state(0);
 
   const symbol = $derived(asset?.symbol);
@@ -55,20 +59,37 @@
     return () => (cancelled = true);
   });
 
-  // Volatility needs daily candles; fetch the 1-year set once per coin.
+  // Volatility and signals need daily candles: fetch the 1-year set once per coin.
+  let daily = $state<CandleSet | null>(null);
+  let dailyFailed = $state(false);
   $effect(() => {
     if (!assetReady) return;
     void symbol;
-    // Read the coin without subscribing, so live price ticks don't reload the chart.
+    // Read the coin without subscribing, so live price ticks don't refetch.
     const a = untrack(() => $state.snapshot(findAsset(id)))!;
     let cancelled = false;
-    volatility = null;
+    daily = null;
+    dailyFailed = false;
     getCandles(a, '1y', () => {})
       .then((set) => {
-        if (!cancelled) volatility = annualizedVolatility(set.candles);
+        if (!cancelled) daily = set;
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) dailyFailed = true;
+      });
     return () => (cancelled = true);
+  });
+
+  const volatility = $derived(daily ? annualizedVolatility(daily.candles) : null);
+  const stable = $derived(asset ? isStablecoin(asset.symbol) : false);
+  /** Worked out here from this page's own chart data; falls back to the server's rating. */
+  const signal = $derived.by(() => {
+    if (!asset || stable) return null;
+    if (daily) {
+      const local = computeSignal(id, daily.candles, daily.source, market.snapshot?.fearGreed?.data.value ?? null, daily.asOf);
+      if (local) return local;
+    }
+    return signalsState.doc?.items[id] ?? null;
   });
 
   function chooseRange(r: Range) {
@@ -143,6 +164,24 @@
       <div class="h-60 animate-pulse rounded-xl bg-surface-2 sm:h-80" aria-busy="true" aria-label="Loading chart"></div>
     {/if}
   </section>
+
+  <div class="mt-4">
+    {#if stable}
+      <section class="rounded-2xl border border-line bg-surface p-4 text-[15px]" aria-label="Signals">
+        <h2 class="text-sm font-medium text-muted">Signals</h2>
+        <p class="mt-1">{asset.name} is a stablecoin: its price is designed to stay at about $1, so trend signals don’t apply.</p>
+      </section>
+    {:else if signal}
+      <SignalCard {signal} name={asset.name} />
+    {:else if daily || dailyFailed}
+      <section class="rounded-2xl border border-line bg-surface p-4 text-[15px]" aria-label="Signals">
+        <h2 class="text-sm font-medium text-muted">Signals</h2>
+        <p class="mt-1">{daily ? 'Not enough price history to rate this coin yet.' : 'Signals aren’t available right now. Try again in a few minutes.'}</p>
+      </section>
+    {:else}
+      <div class="h-40 animate-pulse rounded-2xl bg-surface-2" aria-busy="true" aria-label="Loading signals"></div>
+    {/if}
+  </div>
 
   <section class="mt-4" aria-labelledby="stats-heading">
     <h2 id="stats-heading" class="mb-2 px-1 font-semibold">Key stats</h2>

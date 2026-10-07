@@ -2,6 +2,7 @@ import { fetchCandleSet } from '../../shared/candles';
 import { CircuitBreaker } from '../../shared/failover';
 import { fetchJson } from '../../shared/http';
 import { buildSnapshot, fetchLivePrices } from '../../shared/snapshot';
+import type { SignalsDoc } from '../../shared/signals';
 import { emptySnapshot, type CandleSet, type PriceMap, type Range, type Snapshot } from '../../shared/types';
 
 /**
@@ -60,4 +61,14 @@ export async function loadCandles(id: string, symbol: string, refPrice: number, 
     }
   }
   return fetchCandleSet({ id, symbol, refPrice, range }, browserFetch, breaker, { now: Date.now(), baseDelayMs: 500 });
+}
+
+/**
+ * Ratings for every coin come only from the Worker: computing them in the
+ * browser would mean ~90 chart downloads. Coin pages compute their own.
+ */
+export async function loadSignals(): Promise<SignalsDoc> {
+  const doc = await fromWorker<SignalsDoc>('/api/signals');
+  if (!doc || typeof doc.items !== 'object') throw new Error('Bad signals response');
+  return doc;
 }

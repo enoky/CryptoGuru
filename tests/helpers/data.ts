@@ -86,7 +86,7 @@ export const cgChart = (price: number, n = 168) => ({
  */
 export const healthyRoutes = (over: Record<string, Handler> = {}, down: string[] = []): Record<string, Handler> => {
   const routes: Record<string, Handler> = {
-  [`${COINGECKO_BASE}/coins/markets`]: () => CG_MARKETS,
+  [`${COINGECKO_BASE}/coins/markets`]: (url) => (url.includes('sparkline=true') ? CG_MARKETS : CG_MARKETS.map((m) => ({ ...m, sparkline_in_7d: null }))),
   [`${COINGECKO_BASE}/global`]: () => CG_GLOBAL,
   [`${COINGECKO_BASE}/search/trending`]: () => CG_TRENDING,
   [`${COINGECKO_BASE}/coins/`]: () => cgChart(64000),

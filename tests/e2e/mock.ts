@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { computeSignal, emptySignalsDoc, isStablecoin, type SignalsDoc } from '../../shared/signals';
 import type { Asset, CandleSet, Range, Snapshot } from '../../shared/types';
 
 const NAMES = [
@@ -55,22 +56,40 @@ export function makeSnapshot(asOf = Date.now(), count = 60): Snapshot {
 const STEP: Record<Range, number> = { '7d': 3_600_000, '30d': 4 * 3_600_000, '1y': 86_400_000 };
 const COUNT: Record<Range, number> = { '7d': 168, '30d': 180, '1y': 365 };
 
+/** Odd-length ids trend down, even-length ids trend up, so the mock has both bullish and bearish coins. */
+const trendsUp = (id: string) => id.length % 2 === 0;
+
 export function makeCandles(id: string, range: Range, price: number): CandleSet {
   const now = Date.now();
   const n = COUNT[range];
+  const up = trendsUp(id);
   const candles = Array.from({ length: n }, (_, i) => {
-    const c = price * (0.85 + 0.15 * (i / (n - 1)) + Math.sin(i / 7) / 40);
-    return { t: now - (n - i) * STEP[range], o: c, h: c * 1.01, l: c * 0.99, c, v: 1e6 };
+    const progress = i / (n - 1);
+    const c = price * ((up ? 0.85 + 0.15 * progress : 1.15 - 0.15 * progress) + Math.sin(i / 7) / 40);
+    return { t: now - (n - 1 - i) * STEP[range], o: c, h: c * 1.01, l: c * 0.99, c, v: 1e6 };
   });
   return { id, range, candles, asOf: now, source: 'binance' };
+}
+
+export function makeSignals(snapshot: Snapshot): SignalsDoc {
+  const doc = emptySignalsDoc();
+  const now = Date.now();
+  for (const a of snapshot.markets!.data) {
+    if (isStablecoin(a.symbol)) continue;
+    const s = computeSignal(a.id, makeCandles(a.id, '1y', a.price).candles, 'binance', snapshot.fearGreed?.data.value ?? null, now);
+    if (s) doc.items[a.id] = s;
+  }
+  doc.asOf = now;
+  return doc;
 }
 
 /**
  * Serve /api from mock data and block every other host, so tests never
  * touch real APIs. Pass `apiDown` to simulate the Worker being unreachable.
  */
-export async function mockApi(page: Page, opts: { apiDown?: boolean; snapshot?: Snapshot } = {}) {
+export async function mockApi(page: Page, opts: { apiDown?: boolean; signalsDown?: boolean; snapshot?: Snapshot } = {}) {
   const snapshot = opts.snapshot ?? makeSnapshot();
+  const signals = makeSignals(snapshot);
   await page.route(
     (url) => url.hostname !== 'localhost',
     (route) => route.abort(),
@@ -79,6 +98,9 @@ export async function mockApi(page: Page, opts: { apiDown?: boolean; snapshot?: 
     if (opts.apiDown) return route.fulfill({ status: 503, body: '{"error":"down"}', contentType: 'application/json' });
     const url = new URL(route.request().url());
     if (url.pathname === '/api/snapshot') return route.fulfill({ json: snapshot });
+    if (url.pathname === '/api/signals') {
+      return opts.signalsDown ? route.fulfill({ status: 503, json: { error: 'down' } }) : route.fulfill({ json: signals });
+    }
     if (url.pathname === '/api/prices') return route.fulfill({ json: { prices: { BTC: { price: 64300, change24h: 2.2 } }, asOf: Date.now(), source: 'binance' } });
     const m = url.pathname.match(/^\/api\/candles\/(.+)$/);
     if (m) {

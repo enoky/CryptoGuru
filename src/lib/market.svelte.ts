@@ -1,5 +1,5 @@
 import { CANDLE_TTL_MS } from '../../shared/candles';
-import { REFRESH_MS, withLivePrices } from '../../shared/snapshot';
+import { REFRESH_MS, withLivePrices, withSparklines } from '../../shared/snapshot';
 import type { Asset, CandleSet, PriceMap, Range, Snapshot } from '../../shared/types';
 import { loadCandles, loadPrices, loadSnapshot } from './api';
 import { idbGet, idbSet } from './storage';
@@ -20,7 +20,7 @@ export const market = $state({
 
 /** Snapshot assets with live exchange prices applied. */
 export function assets(): Asset[] {
-  return withLivePrices(market.snapshot?.markets?.data ?? [], market.prices);
+  return market.snapshot ? withLivePrices(withSparklines(market.snapshot), market.prices) : [];
 }
 
 export function findAsset(id: string): Asset | undefined {

@@ -20,6 +20,8 @@ export interface CandleRequest {
   /** Latest snapshot price, used to reject candles for the wrong coin. */
   refPrice?: number;
   range: Range;
+  /** For the 1y range: fetch only this many daily candles (the signal job needs ~250). */
+  days?: number;
 }
 
 /** Exchange data is matched by ticker, so check it really is the same coin. */
@@ -33,25 +35,42 @@ function checked(candles: Candle[], refPrice: number | undefined, source: string
   return clean;
 }
 
-export async function fetchCandleSet(
-  req: CandleRequest,
-  fetchFn: FetchFn,
-  breaker: CircuitBreaker,
-  o: { now: number; coingeckoKey?: string; baseDelayMs?: number },
-): Promise<CandleSet> {
-  const net = { baseDelayMs: o.baseDelayMs };
-  const { id, symbol, refPrice, range } = req;
-  const attempts: Attempt<Candle[], SourceName>[] = [];
-  if (symbol && binance.hasUsdtPair(symbol)) {
-    attempts.push({ name: 'binance', run: async () => checked(await binance.fetchCandles(fetchFn, symbol, range, net), refPrice, 'Binance') });
-  }
-  attempts.push({
+export interface CandleSetOptions {
+  now: number;
+  coingeckoKey?: string;
+  baseDelayMs?: number;
+  retries?: number;
+  /**
+   * 'chart' (default): Binance, CoinGecko, Kraken — CoinGecko has better
+   * coverage. 'exchanges-first': Binance, Kraken, then CoinGecko only if
+   * `allowCoinGecko`, to save the monthly CoinGecko budget for batch jobs.
+   */
+  order?: 'chart' | 'exchanges-first';
+  allowCoinGecko?: boolean;
+}
+
+export async function fetchCandleSet(req: CandleRequest, fetchFn: FetchFn, breaker: CircuitBreaker, o: CandleSetOptions): Promise<CandleSet> {
+  const { id, symbol, refPrice, range, days } = req;
+  const net = { baseDelayMs: o.baseDelayMs, retries: o.retries, days };
+  const onExchanges = !!symbol && binance.hasUsdtPair(symbol);
+  const fromBinance: Attempt<Candle[], SourceName> = {
+    name: 'binance',
+    run: async () => checked(await binance.fetchCandles(fetchFn, symbol!, range, net), refPrice, 'Binance'),
+  };
+  const fromKraken: Attempt<Candle[], SourceName> = {
+    name: 'kraken',
+    run: async () => checked(await kraken.fetchCandles(fetchFn, symbol!, range, net), refPrice, 'Kraken'),
+  };
+  const fromCoinGecko: Attempt<Candle[], SourceName> = {
     name: 'coingecko',
     run: async () => checked(await coingecko.fetchCandles(fetchFn, id, range, { apiKey: o.coingeckoKey, ...net }), undefined, 'CoinGecko'),
-  });
-  if (symbol && binance.hasUsdtPair(symbol)) {
-    attempts.push({ name: 'kraken', run: async () => checked(await kraken.fetchCandles(fetchFn, symbol, range, net), refPrice, 'Kraken') });
-  }
+  };
+
+  const attempts: Attempt<Candle[], SourceName>[] =
+    o.order === 'exchanges-first'
+      ? [...(onExchanges ? [fromBinance, fromKraken] : []), ...(o.allowCoinGecko ? [fromCoinGecko] : [])]
+      : [...(onExchanges ? [fromBinance] : []), fromCoinGecko, ...(onExchanges ? [fromKraken] : [])];
+  if (attempts.length === 0) throw new Error(`No candle source allowed for ${id}`);
   const { value, source } = await firstSuccessful(attempts, breaker);
   return { id, range, candles: value, asOf: o.now, source };
 }

@@ -31,7 +31,7 @@
   <div class="min-w-0 flex-1">
     <TopBar />
     <StatusBanner />
-    <main bind:this={main} tabindex="-1" class="pb-nav mx-auto max-w-3xl px-4 pt-4 outline-none lg:pt-8">
+    <main bind:this={main} tabindex="-1" class="pb-nav mx-auto max-w-3xl px-4 pt-4 outline-none lg:max-w-5xl lg:px-8 lg:pt-8">
       {#if router.route.name === 'asset'}
         {#key router.route.id}<Asset id={router.route.id} />{/key}
       {:else if router.route.name === 'watchlist'}

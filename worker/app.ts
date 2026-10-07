@@ -1,8 +1,12 @@
+import { budgetedFetch } from '../shared/budget';
 import { CANDLE_TTL_MS, fetchCandleSet } from '../shared/candles';
 import { CircuitBreaker } from '../shared/failover';
 import { buildSnapshot, fetchLivePrices, REFRESH_MS } from '../shared/snapshot';
+import type { FetchFn } from '../shared/http';
+import type { SignalsDoc } from '../shared/signals';
 import { emptySnapshot, RANGES, type Range, type Snapshot } from '../shared/types';
 import { TtlCache } from './cache';
+import { refreshSignals, SIGNAL_REFRESH_MS } from './signals';
 
 export interface Env {
   SNAPSHOTS: KVNamespace;
@@ -12,6 +16,9 @@ export interface Env {
 }
 
 export const SNAPSHOT_KEY = 'snapshot:v1';
+export const SIGNALS_KEY = 'signals:v1';
+/** Free Workers may make 50 outbound requests per run; keep some headroom. */
+export const REQUEST_BUDGET = 45;
 
 const breaker = new CircuitBreaker();
 const cache = new TtlCache();
@@ -32,12 +39,28 @@ async function readSnapshot(env: Env): Promise<Snapshot | null> {
 }
 
 /** Refresh due parts and save. Writes to KV only when something changed. */
-export async function refreshSnapshot(env: Env, now: number, force = false) {
+export async function refreshSnapshot(env: Env, now: number, fetchFn: FetchFn = budgetedFetch(fetch, REQUEST_BUDGET)) {
   const prev = (await readSnapshot(env)) ?? emptySnapshot();
-  const result = await buildSnapshot(prev, fetch, breaker, { now, coingeckoKey: env.COINGECKO_DEMO_KEY, force });
+  const result = await buildSnapshot(prev, fetchFn, breaker, { now, coingeckoKey: env.COINGECKO_DEMO_KEY });
   if (result.refreshed.length) await env.SNAPSHOTS.put(SNAPSHOT_KEY, JSON.stringify(result.snapshot));
   for (const e of result.errors) console.warn(`refresh ${e.part} failed: ${e.message}`);
   return result;
+}
+
+/** Cron schedules (also in wrangler.toml). Each run gets its own 10 ms CPU and 50-request allowance. */
+export const SNAPSHOT_CRON = '*/10 * * * *';
+export const SIGNALS_CRON = '5-59/10 * * * *';
+
+/** Rate the next batch of coins, using the stored snapshot. */
+export async function runSignals(env: Env, now: number) {
+  const snapshot = await readSnapshot(env);
+  if (!snapshot?.markets) return;
+  const prev = await env.SNAPSHOTS.get<SignalsDoc>(SIGNALS_KEY, 'json');
+  const result = await refreshSignals(prev, snapshot, budgetedFetch(fetch, REQUEST_BUDGET), breaker, {
+    now,
+    coingeckoKey: env.COINGECKO_DEMO_KEY,
+  });
+  if (result.changed) await env.SNAPSHOTS.put(SIGNALS_KEY, JSON.stringify(result.doc));
 }
 
 async function handleSnapshot(env: Env, ctx: ExecutionContext, now: number) {
@@ -71,15 +94,28 @@ async function handleCandles(env: Env, url: URL, id: string, now: number) {
   return json(set, 200, Math.floor(CANDLE_TTL_MS[range] / 1000));
 }
 
+async function handleSignals(env: Env) {
+  const doc = await cache.get('signals', 60_000, () => env.SNAPSHOTS.get<SignalsDoc>(SIGNALS_KEY, 'json'));
+  return json(doc ?? { asOf: 0, items: {}, skipped: {} }, 200, 300);
+}
+
 async function handleHealth(env: Env, now: number) {
   const snap = await readSnapshot(env);
+  const signals = await env.SNAPSHOTS.get<SignalsDoc>(SIGNALS_KEY, 'json');
+  const rated = signals ? Object.values(signals.items) : [];
+  const signalInfo = {
+    rated: rated.length,
+    stale: rated.filter((s) => now - s.asOf > 3 * SIGNAL_REFRESH_MS).length,
+    skipped: signals ? Object.keys(signals.skipped).length : 0,
+    lastRunSecondsAgo: signals?.asOf ? Math.round((now - signals.asOf) / 1000) : null,
+  };
   const age = (p: { asOf: number; source: string } | null | undefined) =>
     p ? { ageSeconds: Math.round((now - p.asOf) / 1000), source: p.source } : null;
   const parts = snap
     ? { markets: age(snap.markets), global: age(snap.global), trending: age(snap.trending), fearGreed: age(snap.fearGreed) }
     : null;
   const ok = !!snap?.markets && now - snap.markets.asOf < 3 * REFRESH_MS.markets;
-  return json({ ok, parts, breakers: breaker.state(), coingeckoKey: !!env.COINGECKO_DEMO_KEY }, ok ? 200 : 503);
+  return json({ ok, parts, signals: signalInfo, breakers: breaker.state(), coingeckoKey: !!env.COINGECKO_DEMO_KEY }, ok ? 200 : 503);
 }
 
 export default {
@@ -97,6 +133,7 @@ export default {
       }
       const m = url.pathname.match(/^\/api\/candles\/([a-z0-9-]{1,80})$/);
       if (m) return await handleCandles(env, url, m[1], now);
+      if (url.pathname === '/api/signals') return await handleSignals(env);
       if (url.pathname === '/api/health') return await handleHealth(env, now);
       return json({ error: 'Not found' }, 404);
     } catch (err) {
@@ -106,6 +143,6 @@ export default {
   },
 
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(refreshSnapshot(env, event.scheduledTime));
+    ctx.waitUntil(event.cron === SIGNALS_CRON ? runSignals(env, event.scheduledTime) : refreshSnapshot(env, event.scheduledTime));
   },
 } satisfies ExportedHandler<Env>;

@@ -51,7 +51,10 @@ export interface Part<T> {
 }
 
 export interface Snapshot {
+  /** Asset sparklines are empty here; they come from `sparklines`. */
   markets: Part<Asset[]> | null;
+  /** 7-day price sparklines by asset id, refreshed hourly (they are big to download and parse). */
+  sparklines?: Part<Record<string, number[]>> | null;
   global: Part<GlobalStats> | null;
   trending: Part<TrendingCoin[]> | null;
   fearGreed: Part<FearGreed> | null;
@@ -90,4 +93,4 @@ export interface PriceMap {
   source: SourceName;
 }
 
-export const emptySnapshot = (): Snapshot => ({ markets: null, global: null, trending: null, fearGreed: null });
+export const emptySnapshot = (): Snapshot => ({ markets: null, sparklines: null, global: null, trending: null, fearGreed: null });

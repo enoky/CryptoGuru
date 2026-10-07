@@ -16,6 +16,7 @@ binding = "SNAPSHOTS"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
 
 [triggers]
-crons = ["*/10 * * * *"]
+# Snapshot every 10 min; signal batches 5 min later. Must match SNAPSHOT_CRON / SIGNALS_CRON in worker/app.ts.
+crons = ["*/10 * * * *", "5-59/10 * * * *"]
 
 # Secret (never in this file): npx wrangler secret put COINGECKO_DEMO_KEY

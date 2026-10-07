@@ -38,3 +38,32 @@ export const numeric = v.pipe(
   v.transform((x) => Number(x)),
   v.check((n) => Number.isFinite(n), 'not a number'),
 );
+
+/**
+ * Fast path for big numeric tables (candles): checked by hand rather than by
+ * schema, because the Worker's cron has only 10 ms of CPU per run on the
+ * free plan. Rows with non-numbers are dropped; mostly-bad input fails.
+ */
+export function parseNumericRows(input: unknown, minLength: number, what: string): number[][] {
+  if (!Array.isArray(input)) throw new Error(`${what}: expected a list`);
+  const out: number[][] = [];
+  for (const row of input) {
+    if (!Array.isArray(row) || row.length < minLength) continue;
+    const nums = new Array<number>(minLength);
+    let ok = true;
+    for (let i = 0; i < minLength; i++) {
+      const v = row[i];
+      const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
+      if (!Number.isFinite(n)) {
+        ok = false;
+        break;
+      }
+      nums[i] = n;
+    }
+    if (ok) out.push(nums);
+  }
+  if (input.length > 0 && out.length < input.length / 2) {
+    throw new Error(`${what}: ${input.length - out.length} of ${input.length} rows failed validation`);
+  }
+  return out;
+}

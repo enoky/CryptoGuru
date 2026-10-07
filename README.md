@@ -6,7 +6,7 @@ Live prices, charts and plain-English market context for the top 100 crypto asse
 - **Coin pages:** 7D / 30D / 1Y touch-friendly chart, key stats with ⓘ explanations, 30-day volatility, add to watchlist.
 - **Watchlist:** saved on the device only; reorder or remove in edit mode.
 - **Robust:** every data type has backup sources; if everything is down the app shows the last saved data with a clear "as of" time.
-- **Signals:** planned for the next release (see [`PLAN.md`](./PLAN.md) §5).
+- **Signals:** six technical indicators per coin (200-day trend, 50/200 cross, MACD, RSI, volume, Fear & Greed) combined into a −100…+100 score with a confidence level, and every reason spelled out in plain English. The Signals tab ranks and filters all coins. Not predictions or financial advice.
 
 See [`PLAN.md`](./PLAN.md) for the full design and [`PROMPT.md`](./PROMPT.md) for the brief it came from.
 
@@ -15,6 +15,7 @@ See [`PLAN.md`](./PLAN.md) for the full design and [`PROMPT.md`](./PROMPT.md) fo
 ```
 Browser (Svelte app) ──► Cloudflare Worker /api/*  ──► CoinGecko, Binance, CoinPaprika, Kraken, Alternative.me
         │                   ├─ cron every 10 min → KV snapshot (last good data)
+        │                   ├─ cron 5 min later → rate the next 8 coins → KV signals
         │                   └─ in-memory + edge cache for prices and charts
         └─ if the Worker is unreachable, calls the same public APIs directly
 ```
@@ -23,7 +24,7 @@ Browser (Svelte app) ──► Cloudflare Worker /api/*  ──► CoinGecko, Bi
 |---|---|
 | `src/` | The Svelte 5 app (routes, components, client data layer) |
 | `shared/` | API clients, validation, failover — used by both the Worker and the browser |
-| `worker/` | The Cloudflare Worker: `/api/snapshot`, `/api/prices`, `/api/candles/:id?range=7d\|30d\|1y`, `/api/health`, and the cron job |
+| `worker/` | The Cloudflare Worker: `/api/snapshot`, `/api/prices`, `/api/candles/:id?range=7d\|30d\|1y`, `/api/signals`, `/api/health`, and the two cron jobs |
 | `tests/unit/` | Vitest tests (formatting, maths, every API client, failover, the Worker) |
 | `tests/e2e/` | Playwright tests at 360, 375 and 412 px phone sizes, then desktop, with mocked APIs |
 
@@ -64,7 +65,8 @@ Everything runs on Cloudflare's free plan as one Worker that serves both the app
    ```bash
    npm run deploy
    ```
-   Your app is live at `https://cryptoguru.<your-subdomain>.workers.dev`. Check `/api/health` on it.
+   Your app is live at `https://cryptoguru.<your-subdomain>.workers.dev`. Check `/api/health` on it. Signals fill in over the first ~2 hours as coins are rated in batches.
+5. After a day, check **Workers → cryptoguru → Metrics → CPU time** in the Cloudflare dashboard. Free-plan runs are cut off at 10 ms of CPU; if you see errors, lower `BATCH` in `worker/signals.ts`.
 
 **Automatic deploys:** add `CLOUDFLARE_API_TOKEN` (a token with the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID` as GitHub repository secrets. Every push to `main` then deploys via `.github/workflows/deploy.yml`.
 

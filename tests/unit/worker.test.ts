@@ -28,11 +28,12 @@ let env: Env;
 // The Worker keeps caches and breakers in module state, like a real isolate; load a fresh copy per test.
 let worker: typeof import('../../worker/app').default;
 let SNAPSHOT_KEY: string;
+let SIGNALS_KEY: string;
 const call = (path: string) => worker.fetch(new Request(`https://app.test${path}`), env, ctx());
 
 beforeEach(async () => {
   vi.resetModules();
-  ({ default: worker, SNAPSHOT_KEY } = await import('../../worker/app'));
+  ({ default: worker, SNAPSHOT_KEY, SIGNALS_KEY } = await import('../../worker/app'));
   kv = new FakeKV();
   env = { SNAPSHOTS: kv as unknown as KVNamespace };
   vi.stubGlobal('fetch', mockFetch(healthyRoutes()));
@@ -40,21 +41,42 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('worker', () => {
-  it('cron refresh writes one snapshot to KV', async () => {
+  const cron = async (schedule: string) => {
     const c = ctx();
-    await worker.scheduled({ scheduledTime: Date.now(), cron: '*/10 * * * *', noRetry() {} } as ScheduledController, env, c);
+    await worker.scheduled({ scheduledTime: Date.now(), cron: schedule, noRetry() {} } as ScheduledController, env, c);
     await Promise.all(c.waits);
+  };
+
+  it('snapshot cron writes the snapshot; signals cron then rates coins', async () => {
+    await cron('*/10 * * * *');
     expect(kv.writes).toBe(1);
-    const snap = JSON.parse(kv.store.get(SNAPSHOT_KEY)!);
-    expect(snap.markets.data[0].id).toBe('bitcoin');
+    expect(JSON.parse(kv.store.get(SNAPSHOT_KEY)!).markets.data[0].id).toBe('bitcoin');
+    await cron('5-59/10 * * * *');
+    expect(kv.writes).toBe(2);
+    const signals = JSON.parse(kv.store.get(SIGNALS_KEY)!);
+    expect(Object.keys(signals.items).sort()).toEqual(['bitcoin', 'ethereum']); // tether is a stablecoin
   });
 
-  it('a second cron run soon after writes nothing', async () => {
-    for (let i = 0; i < 2; i++) {
-      const c = ctx();
-      await worker.scheduled({ scheduledTime: Date.now(), cron: '', noRetry() {} } as ScheduledController, env, c);
-      await Promise.all(c.waits);
-    }
+  it('signals cron does nothing before there is a snapshot', async () => {
+    await cron('5-59/10 * * * *');
+    expect(kv.writes).toBe(0);
+  });
+
+  it('/api/signals serves the ratings', async () => {
+    await cron('*/10 * * * *');
+    await cron('5-59/10 * * * *');
+    const body = (await (await call('/api/signals')).json()) as { items: Record<string, { label: string }> };
+    expect(body.items.bitcoin.label).toBeTruthy();
+  });
+
+  it('/api/signals is empty before the first cron run', async () => {
+    const body = (await (await call('/api/signals')).json()) as { items: object };
+    expect(body.items).toEqual({});
+  });
+
+  it('a second snapshot run soon after writes nothing', async () => {
+    await cron('*/10 * * * *');
+    await cron('*/10 * * * *');
     expect(kv.writes).toBe(1);
   });
 
