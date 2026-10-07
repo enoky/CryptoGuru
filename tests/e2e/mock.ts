@@ -75,6 +75,23 @@ export function makeCandles(id: string, range: Range, price: number): CandleSet 
   return { id, range, candles, asOf: now, source: 'binance' };
 }
 
+/** ~1000 daily candles: a seeded random walk per coin, ending at its current price. */
+export function makeHistory(id: string, price: number): CandleSet {
+  let seed = [...id].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  const rand = () => ((seed = (seed * 1_664_525 + 1_013_904_223) >>> 0) / 2 ** 32) - 0.5;
+  const n = 1000;
+  const walk = [1];
+  for (let i = 1; i < n; i++) walk.push(walk[i - 1] * Math.exp(0.0005 + 0.06 * rand()));
+  const scale = price / walk[n - 1];
+  const day = 86_400_000;
+  const today = Math.floor(Date.now() / day) * day;
+  const candles = walk.map((w, i) => {
+    const c = w * scale;
+    return { t: today - (n - 1 - i) * day, o: c, h: c * 1.01, l: c * 0.99, c, v: 1e6 * (1 + (i % 5)) };
+  });
+  return { id, range: '1y', candles, asOf: Date.now(), source: 'binance' };
+}
+
 export function makeSignals(snapshot: Snapshot): SignalsDoc {
   const doc = emptySignalsDoc();
   const now = Date.now();
@@ -106,6 +123,16 @@ export async function mockApi(page: Page, opts: { apiDown?: boolean; signalsDown
       return opts.signalsDown ? route.fulfill({ status: 503, json: { error: 'down' } }) : route.fulfill({ json: signals });
     }
     if (url.pathname === '/api/prices') return route.fulfill({ json: { prices: { BTC: { price: 64300, change24h: 2.2 } }, asOf: Date.now(), source: 'binance' } });
+    if (url.pathname === '/api/fear-greed/history') {
+      const day = 86_400_000;
+      const today = Math.floor(Date.now() / day) * day;
+      return route.fulfill({ json: Array.from({ length: 1200 }, (_, i) => ({ t: today - (1199 - i) * day, value: Math.round(50 + 45 * Math.sin(i / 25)) })) });
+    }
+    const hist = url.pathname.match(/^\/api\/history\/(.+)$/);
+    if (hist) {
+      const asset = snapshot.markets!.data.find((a) => a.id === hist[1]);
+      return asset ? route.fulfill({ json: makeHistory(hist[1], asset.price) }) : route.fulfill({ status: 404, json: { error: 'no' } });
+    }
     const m = url.pathname.match(/^\/api\/candles\/(.+)$/);
     if (m) {
       const asset = snapshot.markets!.data.find((a) => a.id === m[1]);

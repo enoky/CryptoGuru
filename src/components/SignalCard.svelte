@@ -77,6 +77,7 @@
     Based on {signal.metrics.days} days of {sourceLabel(signal.source)} prices, calculated at {formatTime(signal.asOf)}.
   </p>
   <p class="mt-3 text-sm text-muted">
-    Signals describe past price behaviour. They are not predictions or financial advice. <a href="#/about" class="underline">More about this</a>
+    Signals describe past price behaviour. They are not predictions or financial advice.
+    <a href="#/signals/backtest" class="underline">See how often they were right in the past</a>
   </p>
 </BottomSheet>

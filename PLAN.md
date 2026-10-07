@@ -27,7 +27,7 @@
 | Global stats (total cap, BTC dominance) | CoinGecko `/global` | CoinPaprika `/v1/global` | Last good snapshot |
 | Trending coins | CoinGecko `/search/trending` | Hide the widget | — |
 | Fear & Greed | Alternative.me | Hide the widget, with a note | — |
-| News (optional, post-MVP) | Not chosen: no free source has clearly suitable terms. Revisit in Phase 3. | — | — |
+| News (optional, post-MVP) | **Not included (checked in Phase 3):** CryptoPanic's API terms couldn't be found; CoinDesk and Cointelegraph publish RSS feeds but license headline display commercially and their terms grant no republishing. Revisit only with written permission or a source whose terms clearly allow it. | — | — |
 
 Stablecoins and coins without a Binance USDT pair (e.g. LEO) use the CoinGecko candle path. The Worker maintains a `symbol → Binance pair` map built from `/api/v3/exchangeInfo` once a day.
 
@@ -352,11 +352,14 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
 
-**Status:** Phases 0, 1 and 2 are built and tested against mocked APIs (97 unit tests, 80 browser tests at 360/375/412 px phones and desktop):
-- Phase 2 signals: indicator maths and rules, the Worker's batch rating job and `/api/signals`, the coin-page signal card and "Why this rating?" sheet, the Signals screener, sorting Markets by signal score.
-- Phase 2 offline and install: a service worker keeps the app shell on the device, so the app opens with no connection and shows its saved data; PNG and maskable icons; an install button where the browser offers one (instructions on iPhone); a "new version ready" banner.
-- Phase 2 currency selector: USD, EUR, GBP, CAD, AUD, JPY, INR, CHF. Exchange rates come from CoinGecko's `/global` market caps (EUR total ÷ USD total), so they cost no extra API calls; the last known rates are kept if CoinPaprika answers instead.
-- Accessibility: axe checks on every screen and sheet, in light and dark mode.
+**Status:** Phases 0–3 are built and tested against mocked APIs (116 unit tests, 92 browser tests at 360/375/412 px phones and desktop).
+- Phase 2: signals; offline app shell and install; currency selector; accessibility checks on every screen and sheet.
+- Phase 3:
+  - **Backtest** (`#/signals/backtest`): the live rules replayed on ~1,000 daily candles for the 20 largest non-stable coins, at 7- and 30-day horizons, each result shown next to the "any day" baseline, with caveats (overlapping windows, correlated coins, survivorship, no costs). Engine in `shared/backtest.ts`, tested for no look-ahead, identical rules to live, and a fixed reference result; runs in a Web Worker and is cached for the day. History comes from `/api/history/:id` (Binance, then Kraken; CoinGecko's free plan only has a year) and `/api/fear-greed/history`.
+  - **Watchlist export/import** as a small JSON file; imports only add; saved coins that left the top 100 are listed with a Remove button instead of silently hidden.
+  - **Nightly API contract check** (`.github/workflows/contract.yml`): calls every real API once, opens a labelled issue on failure, comments if one is open, closes it when passing again.
+  - **Cookieless analytics:** off unless built with `VITE_CF_ANALYTICS_TOKEN` (Cloudflare Web Analytics).
+  - **News feed:** not added; see §1.
 
 Not yet done: verifying against the live APIs and deploying; Lighthouse CI budgets and pull-to-refresh/swipe gestures (Phase 1 leftovers).
 

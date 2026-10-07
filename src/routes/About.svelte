@@ -30,6 +30,11 @@
       title: 'Privacy',
       body: [
         'No accounts, no cookies, no tracking and no ads. Your watchlist and settings are stored only on this device.',
+        ...(import.meta.env.VITE_CF_ANALYTICS_TOKEN
+          ? [
+              'Page visits are counted with Cloudflare Web Analytics, which uses no cookies and collects no personal data: only totals such as how many people opened each page.',
+            ]
+          : []),
       ],
     },
     {

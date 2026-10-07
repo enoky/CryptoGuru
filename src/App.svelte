@@ -9,6 +9,7 @@
   import { startTheme } from './lib/theme.svelte';
   import About from './routes/About.svelte';
   import Asset from './routes/Asset.svelte';
+  import Backtest from './routes/Backtest.svelte';
   import Markets from './routes/Markets.svelte';
   import Signals from './routes/Signals.svelte';
   import Watchlist from './routes/Watchlist.svelte';
@@ -40,6 +41,8 @@
         <Watchlist />
       {:else if router.route.name === 'signals'}
         <Signals />
+      {:else if router.route.name === 'backtest'}
+        <Backtest />
       {:else if router.route.name === 'about'}
         <About />
       {:else}

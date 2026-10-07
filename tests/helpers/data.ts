@@ -1,7 +1,7 @@
 import { BINANCE_BASE } from '../../shared/sources/binance';
 import { COINGECKO_BASE } from '../../shared/sources/coingecko';
 import { COINPAPRIKA_BASE } from '../../shared/sources/coinpaprika';
-import { FEAR_GREED_URL } from '../../shared/sources/feargreed';
+import { FEAR_GREED_HISTORY_URL, FEAR_GREED_URL } from '../../shared/sources/feargreed';
 import { KRAKEN_BASE } from '../../shared/sources/kraken';
 import type { Handler } from './mockFetch';
 
@@ -95,6 +95,9 @@ export const healthyRoutes = (over: Record<string, Handler> = {}, down: string[]
   [`${COINGECKO_BASE}/search/trending`]: () => CG_TRENDING,
   [`${COINGECKO_BASE}/coins/`]: () => cgChart(64000),
   [FEAR_GREED_URL]: () => FNG,
+  [FEAR_GREED_HISTORY_URL]: () => ({
+    data: Array.from({ length: 40 }, (_, i) => ({ value: String(20 + i), value_classification: 'x', timestamp: String(1_700_000_000 - i * 86_400) })),
+  }),
   [`${COINPAPRIKA_BASE}/tickers`]: () => PAPRIKA_TICKERS,
   [`${COINPAPRIKA_BASE}/global`]: () => PAPRIKA_GLOBAL,
   [`${BINANCE_BASE}/ticker/24hr`]: () => [

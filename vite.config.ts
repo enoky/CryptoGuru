@@ -30,8 +30,31 @@ function serviceWorker(): Plugin {
   };
 }
 
+/**
+ * Optional, off by default: Cloudflare Web Analytics (no cookies, no personal
+ * data). Turned on by building with VITE_CF_ANALYTICS_TOKEN set to the site's
+ * token from the Cloudflare dashboard.
+ */
+function cookielessAnalytics(): Plugin {
+  const token = process.env.VITE_CF_ANALYTICS_TOKEN ?? '';
+  return {
+    name: 'cryptoguru-analytics',
+    transformIndexHtml() {
+      if (!token) return [];
+      if (!/^[a-f0-9]{32}$/.test(token)) throw new Error('VITE_CF_ANALYTICS_TOKEN should be the 32-character token from Cloudflare Web Analytics');
+      return [
+        {
+          tag: 'script',
+          attrs: { defer: true, src: 'https://static.cloudflareinsights.com/beacon.min.js', 'data-cf-beacon': JSON.stringify({ token }) },
+          injectTo: 'body',
+        },
+      ];
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [svelte(), tailwindcss(), serviceWorker()],
+  plugins: [svelte(), tailwindcss(), serviceWorker(), cookielessAnalytics()],
   build: { target: 'es2022' },
   server: {
     // `npm run worker:dev` serves the API on 8787; the Vite dev server proxies to it.

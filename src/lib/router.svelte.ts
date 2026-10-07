@@ -3,6 +3,7 @@ export type Route =
   | { name: 'asset'; id: string }
   | { name: 'watchlist' }
   | { name: 'signals' }
+  | { name: 'backtest' }
   | { name: 'about' };
 
 export function parseHash(hash: string): Route {
@@ -11,6 +12,7 @@ export function parseHash(hash: string): Route {
   if (asset) return { name: 'asset', id: asset[1] };
   if (path === '/watchlist') return { name: 'watchlist' };
   if (path === '/signals') return { name: 'signals' };
+  if (path === '/signals/backtest') return { name: 'backtest' };
   if (path === '/about') return { name: 'about' };
   return { name: 'markets' };
 }

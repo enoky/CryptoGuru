@@ -7,6 +7,8 @@ Live prices, charts and plain-English market context for the top 100 crypto asse
 - **Watchlist:** saved on the device only; reorder or remove in edit mode.
 - **Robust:** every data type has backup sources; if everything is down the app shows the last saved data with a clear "as of" time.
 - **Works offline and installs like an app:** after one visit it opens with no connection; add it to your home screen from the About tab.
+- **How reliable are signals?** A backtest replays the rules on ~2½ years of prices for the 20 largest coins and shows how often each signal was followed by a rise or fall, next to how often prices rose on any day.
+- **Move your watchlist:** save it to a file and load it on another phone (Watchlist → ⋯).
 - **Your currency:** USD, EUR, GBP, CAD, AUD, JPY, INR or CHF (top bar), converted with CoinGecko's exchange rates.
 - **Signals:** six technical indicators per coin (200-day trend, 50/200 cross, MACD, RSI, volume, Fear & Greed) combined into a −100…+100 score with a confidence level, and every reason spelled out in plain English. The Signals tab ranks and filters all coins. Not predictions or financial advice.
 
@@ -71,6 +73,10 @@ Everything runs on Cloudflare's free plan as one Worker that serves both the app
    ```
    Your app is live at `https://cryptoguru.<your-subdomain>.workers.dev`. Check `/api/health` on it. Signals fill in over the first ~2 hours as coins are rated in batches.
 5. After a day, check **Workers → cryptoguru → Metrics → CPU time** in the Cloudflare dashboard. Free-plan runs are cut off at 10 ms of CPU; if you see errors, lower `BATCH` in `worker/signals.ts`.
+
+**Nightly API check:** `.github/workflows/contract.yml` runs every night (or from the Actions tab) and opens an issue labelled `api-contract` if an API changes. Add `COINGECKO_DEMO_KEY` as a repository secret so it uses your key.
+
+**Optional cookieless analytics:** create a site in Cloudflare → Web Analytics, then add its token as a repository *variable* `CF_ANALYTICS_TOKEN` (or set `VITE_CF_ANALYTICS_TOKEN` when building). No cookies or personal data; the About page mentions it automatically when it's on.
 
 **Automatic deploys:** add `CLOUDFLARE_API_TOKEN` (a token with the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID` as GitHub repository secrets. Every push to `main` then deploys via `.github/workflows/deploy.yml`.
 

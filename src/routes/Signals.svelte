@@ -50,9 +50,12 @@
 <p class="mt-1 text-[15px] text-muted">
   What common technical indicators say about each coin, in plain English. Not predictions or financial advice.
 </p>
-<button type="button" class="-ml-1 inline-flex min-h-11 items-center px-1 text-[15px] font-medium text-accent underline" onclick={() => (howOpen = true)}>
-  How signals work
-</button>
+<div class="flex flex-wrap gap-x-4">
+  <button type="button" class="-ml-1 inline-flex min-h-11 items-center px-1 text-[15px] font-medium text-accent underline" onclick={() => (howOpen = true)}>
+    How signals work
+  </button>
+  <a href="#/signals/backtest" class="inline-flex min-h-11 items-center px-1 text-[15px] font-medium text-accent underline">How reliable are they?</a>
+</div>
 
 <div class="-mx-4 mt-1 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]" role="group" aria-label="Filter">
   {#each FILTERS as f}

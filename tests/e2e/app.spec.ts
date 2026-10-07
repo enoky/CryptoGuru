@@ -282,3 +282,68 @@ test('accessibility: watchlist, dark Signals and the install card', async ({ pag
   await expect(page.getByRole('heading', { name: 'Add CryptoGuru to your home screen' })).toBeVisible();
   await axe(page);
 });
+
+test('backtest shows how often signals were right, against the any-day yardstick', async ({ page }) => {
+  await page.goto('/#/signals');
+  await page.getByRole('link', { name: 'How reliable are they?' }).click();
+  await expect(page).toHaveURL(/#\/signals\/backtest$/);
+  await expect(page.getByRole('heading', { name: 'How reliable are the signals?' })).toBeVisible();
+
+  const yardstick = page.getByRole('region', { name: 'The yardstick: any day' });
+  await expect(yardstick).toContainText(/higher 30 days later \d+%/, { timeout: 20_000 });
+  const ratings = page.getByRole('region', { name: 'Overall ratings' }).getByRole('listitem');
+  await expect(ratings).toHaveCount(5);
+  await expect(page.getByRole('region', { name: 'Each indicator' }).getByRole('listitem')).toHaveCount(6);
+  await expect(page.getByText(/\d+ coins · /)).toContainText('20 coins'); // the 20 largest after skipping Tether
+  await expectNoHorizontalScroll(page);
+  await expectTapTargets(page);
+  await axe(page);
+
+  await page.getByRole('button', { name: 'Next 7 days' }).click();
+  await expect(yardstick).toContainText(/higher 7 days later \d+%/);
+  // The signals tab stays highlighted while on the backtest page.
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Signals' })).toHaveAttribute('aria-current', 'page');
+});
+
+test('watchlist can be saved to a file and loaded back', async ({ page }) => {
+  await page.goto('/#/asset/solana');
+  await page.getByRole('button', { name: 'Add to watchlist' }).click();
+  await page.goto('/#/watchlist');
+  await page.getByRole('button', { name: 'Back up or move your watchlist' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Back up or move your watchlist' });
+  await expectTapTargets(page);
+  await axe(page);
+
+  const [download] = await Promise.all([page.waitForEvent('download'), sheet.getByRole('button', { name: 'Save watchlist to a file' }).click()]);
+  expect(download.suggestedFilename()).toBe('cryptoguru-watchlist.json');
+  const saved = JSON.parse(await (await download.createReadStream()).toArray().then((c) => Buffer.concat(c).toString()));
+  expect(saved.watchlist).toEqual(['solana']);
+  await expect(sheet.getByRole('status')).toContainText('Saved 1 coin');
+
+  // Simulate a new phone: empty watchlist, then load the file.
+  await page.evaluate(() => localStorage.removeItem('watchlist:v1'));
+  await page.reload();
+  await expect(page.getByText('Your watchlist is empty')).toBeVisible();
+  await page.getByRole('button', { name: 'Load a saved file' }).click();
+  await sheet.locator('input[type=file]').setInputFiles({
+    name: 'cryptoguru-watchlist.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ ...saved, watchlist: ['solana', 'bitcoin', 'gone-coin'] })),
+  });
+  await expect(sheet.getByRole('status')).toContainText('Added 3 coins');
+  await page.goBack();
+  await expect(page.getByRole('link', { name: /^Solana,/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^Bitcoin,/ })).toBeVisible();
+  // A coin outside the top 100 is explained, not silently dropped.
+  await expect(page.getByRole('status').filter({ hasText: 'gone-coin' })).toContainText('isn’t in today’s top 100');
+  await page.getByRole('button', { name: 'Remove' }).click();
+  await expect(page.getByText('gone-coin')).toHaveCount(0);
+});
+
+test('a bad watchlist file shows a clear error', async ({ page }) => {
+  await page.goto('/#/watchlist');
+  await page.getByRole('button', { name: 'Back up or move your watchlist' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Back up or move your watchlist' });
+  await sheet.locator('input[type=file]').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('nope') });
+  await expect(sheet.getByRole('status')).toContainText('isn’t valid JSON');
+});

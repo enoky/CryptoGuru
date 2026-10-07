@@ -22,10 +22,6 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.svelte",
-    "shared/**/*.ts",
-    "tests/**/*.ts"
-  ],
-  "exclude": [
-    "tests/unit/worker.test.ts"
+    "shared/**/*.ts"
   ]
 }

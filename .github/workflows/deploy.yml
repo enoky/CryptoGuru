@@ -26,6 +26,9 @@ jobs:
           cache: npm
       - if: steps.token.outputs.present == 'true'
         run: npm ci && npm run build
+        env:
+          # Optional: a repository *variable* (not secret, it ends up in the page) to turn on cookieless analytics.
+          VITE_CF_ANALYTICS_TOKEN: ${{ vars.CF_ANALYTICS_TOKEN }}
       - if: steps.token.outputs.present == 'true'
         run: npx wrangler deploy
         env:

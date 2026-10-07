@@ -2,6 +2,7 @@ import { fetchCandleSet } from '../../shared/candles';
 import { CircuitBreaker } from '../../shared/failover';
 import { fetchJson } from '../../shared/http';
 import { buildSnapshot, fetchLivePrices } from '../../shared/snapshot';
+import { fetchFearGreedHistory } from '../../shared/sources/feargreed';
 import type { SignalsDoc } from '../../shared/signals';
 import { emptySnapshot, type CandleSet, type PriceMap, type Range, type Snapshot } from '../../shared/types';
 
@@ -71,4 +72,30 @@ export async function loadSignals(): Promise<SignalsDoc> {
   const doc = await fromWorker<SignalsDoc>('/api/signals');
   if (!doc || typeof doc.items !== 'object') throw new Error('Bad signals response');
   return doc;
+}
+
+/** ~1000 daily candles for the backtest: Worker first, then the exchanges directly. */
+export async function loadHistory(id: string, symbol: string, refPrice: number): Promise<CandleSet> {
+  try {
+    const set = await fromWorker<CandleSet>(`/api/history/${encodeURIComponent(id)}`);
+    if (set?.candles?.length) return set;
+  } catch {
+    // fall through to the exchanges
+  }
+  return fetchCandleSet({ id, symbol, refPrice, range: '1y', days: 1000 }, browserFetch, breaker, {
+    now: Date.now(),
+    baseDelayMs: 500,
+    order: 'exchanges-first',
+    allowCoinGecko: false,
+  });
+}
+
+export async function loadFearGreedHistory(): Promise<{ t: number; value: number }[]> {
+  try {
+    const rows = await fromWorker<{ t: number; value: number }[]>('/api/fear-greed/history');
+    if (Array.isArray(rows) && rows.length) return rows;
+  } catch {
+    // fall through
+  }
+  return fetchFearGreedHistory(browserFetch, { baseDelayMs: 500 });
 }

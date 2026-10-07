@@ -22,3 +22,8 @@ export function moveWatch(id: string, delta: -1 | 1) {
   watchlist.ids = next;
   save();
 }
+
+export function replaceWatch(ids: string[]) {
+  watchlist.ids = ids;
+  save();
+}

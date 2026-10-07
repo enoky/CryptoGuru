@@ -7,7 +7,7 @@
   const TABS: { href: string; label: string; icon: IconName; match: string[] }[] = [
     { href: '#/', label: 'Markets', icon: 'markets', match: ['markets', 'asset'] },
     { href: '#/watchlist', label: 'Watchlist', icon: 'star', match: ['watchlist'] },
-    { href: '#/signals', label: 'Signals', icon: 'signals', match: ['signals'] },
+    { href: '#/signals', label: 'Signals', icon: 'signals', match: ['signals', 'backtest'] },
     { href: '#/about', label: 'About', icon: 'info', match: ['about'] },
   ];
 </script>

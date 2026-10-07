@@ -114,6 +114,23 @@ describe('worker', () => {
     expect(((await res.json()) as { parts: { markets: { source: string } } }).parts.markets.source).toBe('coingecko');
   });
 
+  it('/api/history serves ~1000 daily candles from the exchanges only', async () => {
+    await call('/api/snapshot');
+    const f = globalThis.fetch as typeof fetch & { calls: string[] };
+    const res = await call('/api/history/bitcoin');
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { source: string }).source).toBe('binance');
+    expect(f.calls.find((u) => u.includes('klines'))).toContain('limit=1000');
+    expect((await call('/api/history/tether')).status).toBe(404); // stablecoin
+    expect((await call('/api/history/not-a-coin')).status).toBe(404);
+  });
+
+  it('/api/fear-greed/history returns the daily history oldest first', async () => {
+    const rows = (await (await call('/api/fear-greed/history')).json()) as { t: number; value: number }[];
+    expect(rows).toHaveLength(40);
+    expect(rows[0].t).toBeLessThan(rows[1].t);
+  });
+
   it('rejects other methods and unknown API paths', async () => {
     expect((await worker.fetch(new Request('https://app.test/api/snapshot', { method: 'POST' }), env, ctx())).status).toBe(405);
     expect((await call('/api/nope')).status).toBe(404);

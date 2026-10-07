@@ -2,6 +2,8 @@ import { budgetedFetch } from '../shared/budget';
 import { CANDLE_TTL_MS, fetchCandleSet } from '../shared/candles';
 import { CircuitBreaker } from '../shared/failover';
 import { buildSnapshot, fetchLivePrices, REFRESH_MS } from '../shared/snapshot';
+import { fetchFearGreedHistory } from '../shared/sources/feargreed';
+import { isStablecoin } from '../shared/signals';
 import type { FetchFn } from '../shared/http';
 import type { SignalsDoc } from '../shared/signals';
 import { emptySnapshot, RANGES, type Range, type Snapshot } from '../shared/types';
@@ -94,6 +96,26 @@ async function handleCandles(env: Env, url: URL, id: string, now: number) {
   return json(set, 200, Math.floor(CANDLE_TTL_MS[range] / 1000));
 }
 
+/** Daily candles for the backtest. Changes once a day, so cached for 12 hours. */
+export const HISTORY_DAYS = 1000;
+const HISTORY_TTL_MS = 12 * 60 * 60_000;
+
+async function handleHistory(env: Env, id: string, now: number) {
+  const snap = await cache.get('snapshot', 60_000, () => readSnapshot(env));
+  const asset = snap?.markets?.data.find((a) => a.id === id);
+  if (!asset) return json({ error: 'Only coins in the current top 100 have history' }, 404);
+  if (isStablecoin(asset.symbol)) return json({ error: 'Stablecoins are not backtested' }, 404);
+  const set = await cache.get(`history:${id}`, HISTORY_TTL_MS, () =>
+    // Exchanges only: CoinGecko's free plan has just one year of history.
+    fetchCandleSet({ id, symbol: asset.symbol, refPrice: asset.price, range: '1y', days: HISTORY_DAYS }, fetch, breaker, {
+      now,
+      order: 'exchanges-first',
+      allowCoinGecko: false,
+    }),
+  );
+  return json(set, 200, HISTORY_TTL_MS / 1000);
+}
+
 async function handleSignals(env: Env) {
   const doc = await cache.get('signals', 60_000, () => env.SNAPSHOTS.get<SignalsDoc>(SIGNALS_KEY, 'json'));
   return json(doc ?? { asOf: 0, items: {}, skipped: {} }, 200, 300);
@@ -134,6 +156,11 @@ export default {
       const m = url.pathname.match(/^\/api\/candles\/([a-z0-9-]{1,80})$/);
       if (m) return await handleCandles(env, url, m[1], now);
       if (url.pathname === '/api/signals') return await handleSignals(env);
+      if (url.pathname === '/api/fear-greed/history') {
+        return json(await cache.get('fng-history', HISTORY_TTL_MS, () => fetchFearGreedHistory(fetch)), 200, HISTORY_TTL_MS / 1000);
+      }
+      const h = url.pathname.match(/^\/api\/history\/([a-z0-9-]{1,80})$/);
+      if (h) return await handleHistory(env, h[1], now);
       if (url.pathname === '/api/health') return await handleHealth(env, now);
       return json({ error: 'Not found' }, 404);
     } catch (err) {
