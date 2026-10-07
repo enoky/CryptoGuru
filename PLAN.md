@@ -276,7 +276,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | Unit: indicator maths | Vitest | SMA, EMA, RSI (Wilder), MACD, volatility and score combination, checked against **known reference series** (e.g. the classic Wilder RSI example; values cross-checked with a pandas-ta export saved as fixtures). Edge cases: too little history, flat prices, gaps, NaN. |
 | Unit: adapters and schemas | Vitest | Each source's response → internal type; malformed payloads are rejected; sanity checks |
 | Integration | Vitest + MSW | Fetch layer: SWR, backoff, circuit breaker, failover order, stale stamps. The Worker is tested with `wrangler`'s local runtime (Miniflare). |
-| Component | Vitest + Testing Library | SignalBadge text and icons; WhyPanel wording; error/empty states |
+| Component | Vitest + Testing Library | SignalBadge text and icons; WhySheet wording; error/empty states |
 | End-to-end smoke | Playwright, run at **phone sizes first** (iPhone SE 375 px, Pixel 7 412 px with touch enabled), then desktop | Check there's no horizontal scrolling and that tap targets are at least 44 px. Load the dashboard with mocked APIs → open an asset → switch chart range → add to watchlist → reload and confirm it persisted → simulate the API down and confirm the stale banner appears |
 | Accessibility | `@axe-core/playwright` | No serious or critical violations on each screen, at phone and desktop sizes |
 | Visual | Playwright screenshots at 360 px and 412 px | Catch text wrapping, cut-off numbers and overlap on small screens |
