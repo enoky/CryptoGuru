@@ -1,0 +1,63 @@
+import { fetchCandleSet } from '../../shared/candles';
+import { CircuitBreaker } from '../../shared/failover';
+import { fetchJson } from '../../shared/http';
+import { buildSnapshot, fetchLivePrices } from '../../shared/snapshot';
+import { emptySnapshot, type CandleSet, type PriceMap, type Range, type Snapshot } from '../../shared/types';
+
+/**
+ * Data comes from our Worker (/api) first. If it's unreachable, the browser
+ * calls the public APIs directly: they all allow cross-origin requests and
+ * need no key, so the app keeps working, just with less caching.
+ */
+const breaker = new CircuitBreaker();
+const browserFetch: typeof fetch = (...args) => fetch(...args);
+
+const fromWorker = <T>(path: string) => fetchJson(browserFetch, path, { retries: 1, timeoutMs: 8000, baseDelayMs: 500 }) as Promise<T>;
+
+export async function loadSnapshot(prev: Snapshot | null): Promise<Snapshot> {
+  if (!breaker.isOpen('worker')) {
+    try {
+      const snap = await fromWorker<Snapshot>('/api/snapshot');
+      if (!snap?.markets?.data?.length) throw new Error('empty snapshot');
+      breaker.success('worker');
+      return snap;
+    } catch {
+      breaker.failure('worker');
+    }
+  }
+  const { snapshot, refreshed } = await buildSnapshot(prev ?? emptySnapshot(), browserFetch, breaker, {
+    now: Date.now(),
+    force: true,
+    baseDelayMs: 500,
+  });
+  // buildSnapshot keeps old data when every source fails; that's still a failed refresh.
+  if (!refreshed.includes('markets')) throw new Error('No market data available');
+  return snapshot;
+}
+
+export async function loadPrices(): Promise<PriceMap> {
+  if (!breaker.isOpen('worker-prices')) {
+    try {
+      const p = await fromWorker<PriceMap>('/api/prices');
+      breaker.success('worker-prices');
+      return p;
+    } catch {
+      breaker.failure('worker-prices');
+    }
+  }
+  return fetchLivePrices(browserFetch, Date.now(), 500);
+}
+
+export async function loadCandles(id: string, symbol: string, refPrice: number, range: Range): Promise<CandleSet> {
+  if (!breaker.isOpen('worker-candles')) {
+    try {
+      const set = await fromWorker<CandleSet>(`/api/candles/${encodeURIComponent(id)}?range=${range}`);
+      if (!set?.candles?.length) throw new Error('empty candles');
+      breaker.success('worker-candles');
+      return set;
+    } catch {
+      breaker.failure('worker-candles');
+    }
+  }
+  return fetchCandleSet({ id, symbol, refPrice, range }, browserFetch, breaker, { now: Date.now(), baseDelayMs: 500 });
+}

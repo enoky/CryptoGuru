@@ -2,7 +2,7 @@
 
 > Produced from [`PROMPT.md`](./PROMPT.md). Items marked **⚠ verify before build** depend on free-tier limits or API terms that change often; check them against the provider's current docs before writing code.
 
-**One-line summary:** a static Svelte single-page app on Cloudflare Pages. Behind it sits one Cloudflare Worker that caches CoinGecko and Binance public data for all users. In the browser, the app computes transparent technical-indicator signals and explains each one in plain English. Running cost is $0; there are no user accounts and no tracking.
+**One-line summary:** a static Svelte single-page app served by one Cloudflare Worker (using Workers static assets), which also that caches CoinGecko and Binance public data for all users. In the browser, the app computes transparent technical-indicator signals and explains each one in plain English. Running cost is $0; there are no user accounts and no tracking.
 
 ---
 
@@ -58,6 +58,8 @@ Stablecoins and coins without a Binance USDT pair (e.g. LEO) use the CoinGecko c
 - **Cron pull instead of on-demand fetching for CoinGecko.** This puts a hard ceiling on CoinGecko usage regardless of traffic.
 - **A direct-from-browser fallback.** If the Worker or its quota is exhausted, the app still works using keyless, CORS-enabled sources.
 - **Indicators computed in the browser.** No extra server work is needed, and users can inspect the inputs.
+- **One Worker serves both the app and the API** (Workers static assets) instead of Pages plus a separate Worker. It's one deploy, the API is same-origin, and the free tier is the same. *(Changed during the MVP build.)*
+- **Two cache layers in the Worker:** an in-memory cache per isolate, then Cloudflare's Cache API. The Cache API does nothing on `*.workers.dev` domains ⚠, so the memory layer is what protects rate limits until a custom domain is added.
 
 Alternative considered: a GitHub Actions cron that commits JSON to GitHub Pages. It's simpler, but schedules can be delayed by 10–60 min and each update means a commit, so it's kept only as a contingency if Cloudflare's terms change.
 
@@ -290,12 +292,11 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 ## 9. Deployment and operations
 
 ### Deploying (all free, no credit card)
-1. Create a Cloudflare account. Create a **Pages** project connected to the GitHub repo (build: `npm run build`, output: `dist`).
-2. Create a **Worker** `cryptoguru-api` with a **KV namespace** `SNAPSHOTS` and a cron trigger `*/10 * * * *`. Deploy it with `wrangler deploy` from GitHub Actions on merge to `main`.
+1. Create a Cloudflare account and a **KV namespace** `SNAPSHOTS`; put its id in `wrangler.toml`.
+2. One **Worker** `cryptoguru` serves the built app (`dist/`, with single-page-app fallback) and `/api/*`, and runs the cron trigger `*/10 * * * *`. `npm run deploy` builds and deploys it.
 3. Store `COINGECKO_DEMO_KEY` as a Worker secret (`wrangler secret put`). It never appears in the frontend.
-4. Route the Worker at `/api/*` on the Pages domain (or use Pages Functions) so it's same-origin and needs no CORS setup.
-5. Config: `wrangler.toml` holds TTLs, cron schedule and source order; the frontend `.env` holds only `VITE_API_BASE`.
-6. Pages preview deployments run automatically for each PR.
+4. GitHub Actions deploys on every push to `main` once `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets exist.
+5. Step-by-step instructions are in the README.
 
 ### Noticing and responding to problems
 - `/api/health` reports the last successful fetch time per source, circuit-breaker states and the KV snapshot age.
@@ -333,6 +334,8 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
+
+**Status (MVP build):** Phases 0 and 1 are built and tested against mocked APIs: Worker with cron snapshot, failover and caching; Markets, coin, Watchlist and About screens; phone-first layout; 53 unit tests and 40 browser tests across 360/375/412 px phones and desktop. Not yet verified against the live APIs or deployed. Remaining from Phase 1: Lighthouse CI budgets, and pull-to-refresh/swipe gestures (the visible buttons are in place). Next: Phase 2 (signals, PWA offline shell).
 
 ---
 
