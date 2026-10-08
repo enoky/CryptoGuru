@@ -3,7 +3,7 @@ import { CANDLE_TTL_MS, fetchCandleSet } from '../shared/candles';
 import { CircuitBreaker } from '../shared/failover';
 import { buildSnapshot, fetchLivePrices, REFRESH_MS } from '../shared/snapshot';
 import { fetchFearGreedHistory } from '../shared/sources/feargreed';
-import { isStablecoin } from '../shared/signals';
+import { emptySignalsDoc, isPeggedSymbol, SIGNALS_VERSION } from '../shared/signals';
 import type { FetchFn } from '../shared/http';
 import type { SignalsDoc } from '../shared/signals';
 import { emptySnapshot, RANGES, type Range, type Snapshot } from '../shared/types';
@@ -104,7 +104,7 @@ async function handleHistory(env: Env, id: string, now: number) {
   const snap = await cache.get('snapshot', 60_000, () => readSnapshot(env));
   const asset = snap?.markets?.data.find((a) => a.id === id);
   if (!asset) return json({ error: 'Only coins in the current top 100 have history' }, 404);
-  if (isStablecoin(asset.symbol)) return json({ error: 'Stablecoins are not backtested' }, 404);
+  if (isPeggedSymbol(asset.symbol)) return json({ error: 'Stablecoins and other pegged assets are not backtested' }, 404);
   const set = await cache.get(`history:${id}`, HISTORY_TTL_MS, () =>
     // Exchanges only: CoinGecko's free plan has just one year of history.
     fetchCandleSet({ id, symbol: asset.symbol, refPrice: asset.price, range: '1y', days: HISTORY_DAYS }, fetch, breaker, {
@@ -118,12 +118,14 @@ async function handleHistory(env: Env, id: string, now: number) {
 
 async function handleSignals(env: Env) {
   const doc = await cache.get('signals', 60_000, () => env.SNAPSHOTS.get<SignalsDoc>(SIGNALS_KEY, 'json'));
-  return json(doc ?? { asOf: 0, items: {}, skipped: {} }, 200, 300);
+  // Until the first run after an upgrade, the stored ratings are in the old format: serve none rather than misread them.
+  return json(doc?.version === SIGNALS_VERSION ? doc : emptySignalsDoc(), 200, 300);
 }
 
 async function handleHealth(env: Env, now: number) {
   const snap = await readSnapshot(env);
-  const signals = await env.SNAPSHOTS.get<SignalsDoc>(SIGNALS_KEY, 'json');
+  const stored = await env.SNAPSHOTS.get<SignalsDoc>(SIGNALS_KEY, 'json');
+  const signals = stored?.version === SIGNALS_VERSION ? stored : null;
   const rated = signals ? Object.values(signals.items) : [];
   // Ratings from CoinGecko are refreshed only twice a day by design (to save its monthly quota),
   // so each rating is judged against its own cycle, with two missed batch cycles of slack.
@@ -134,7 +136,10 @@ async function handleHealth(env: Env, now: number) {
     fromCoinGecko: rated.filter((s) => s.source === 'coingecko').length,
     /** Coins tried but with no rating at all (too little history, or no source has them). */
     unrated: signals ? Object.keys(signals.skipped).filter((id) => !signals.items[id]).length : 0,
+    /** Coins whose price barely moves (tokenised funds, newer stablecoins): not rated. */
+    pegged: signals ? Object.keys(signals.pegged).length : 0,
     lastRunSecondsAgo: signals?.asOf ? Math.round((now - signals.asOf) / 1000) : null,
+    market: signals?.market ?? null,
   };
   const age = (p: { asOf: number; source: string } | null | undefined) =>
     p ? { ageSeconds: Math.round((now - p.asOf) / 1000), source: p.source } : null;

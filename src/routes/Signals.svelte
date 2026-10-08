@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { INDICATORS, THRESHOLDS, type CoinSignal } from '../../shared/signals';
+  import { GROUPS, THRESHOLDS, type CoinSignal } from '../../shared/signals';
   import type { Asset } from '../../shared/types';
   import BottomSheet from '../components/BottomSheet.svelte';
   import ErrorInline from '../components/ErrorInline.svelte';
@@ -14,14 +14,15 @@
 
   void startSignals();
 
-  type FilterKey = 'all' | 'bullish' | 'bearish' | 'oversold' | 'overbought' | 'above200' | 'volume';
+  type FilterKey = 'all' | 'bullish' | 'bearish' | 'beatingBtc' | 'oversold' | 'overbought' | 'above200' | 'volume';
   const FILTERS: { key: FilterKey; label: string; test: (s: CoinSignal) => boolean }[] = [
     { key: 'all', label: 'All', test: () => true },
     { key: 'bullish', label: 'Bullish', test: (s) => s.tone === 'bullish' },
     { key: 'bearish', label: 'Bearish', test: (s) => s.tone === 'bearish' },
+    { key: 'beatingBtc', label: 'Beating Bitcoin', test: (s) => (s.signals.strength ?? 0) >= THRESHOLDS.clear },
     { key: 'oversold', label: 'Oversold', test: (s) => s.metrics.rsi != null && s.metrics.rsi < THRESHOLDS.rsiOversold },
     { key: 'overbought', label: 'Overbought', test: (s) => s.metrics.rsi != null && s.metrics.rsi > THRESHOLDS.rsiOverbought },
-    { key: 'above200', label: 'Above 200-day avg', test: (s) => s.signals.trend === 1 },
+    { key: 'above200', label: 'Above 200-day avg', test: (s) => s.metrics.sma200 != null && s.metrics.close > s.metrics.sma200 },
     { key: 'volume', label: 'Unusual volume', test: (s) => s.metrics.volumeRatio != null && s.metrics.volumeRatio > THRESHOLDS.volumeRatio },
   ];
 
@@ -98,13 +99,13 @@
           <a
             href="#/asset/{a.id}"
             class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 hover:bg-surface-2"
-            aria-label="{a.name}: {s.label}, {s.confidence.toLowerCase()} confidence, score {formatScore(s.score)}">
+            aria-label="{a.name}: {s.label}, {s.agreement.toLowerCase()} agreement, score {formatScore(s.score)}">
             <Logo src={a.image} symbol={a.symbol} />
             <div class="min-w-0">
               <div class="truncate font-medium">{a.name}</div>
               <div class="truncate text-sm {s.tone === 'bullish' ? 'text-up' : s.tone === 'bearish' ? 'text-down' : 'text-muted'}">
                 <span aria-hidden="true">{s.tone === 'bullish' ? '▲' : s.tone === 'bearish' ? '▼' : '–'}</span>
-                {s.label}<span class="text-muted">{` · ${s.confidence}`}</span>
+                {s.label}<span class="text-muted">{` · ${s.agreement} agreement`}</span>
               </div>
             </div>
             <div class="text-right">
@@ -118,7 +119,7 @@
   {/if}
   <p class="mt-3 px-1 text-sm {stale ? 'text-warn' : 'text-muted'}">
     {stale ? 'May be out of date · ' : ''}Ratings updated {formatTime(asOf)}. Each coin is re-rated about every 2 hours.
-    Stablecoins aren’t rated: their price is designed to stay at US$1.
+    Stablecoins and other pegged assets (tokenised funds, gold tokens) aren’t rated: their prices track something outside crypto.
   </p>
 {/if}
 
@@ -128,17 +129,24 @@
 
 <BottomSheet bind:open={howOpen} title="How signals work">
   <p class="text-[15px]">
-    Each coin gets six simple checks on its daily prices. Each check is bullish (+1), bearish (−1) or neutral (0), and counts by its
-    weight:
+    Each coin gets four checks on its daily prices. Each reads from −1 (bearish) to +1 (bullish) and counts by its weight:
   </p>
   <ul class="mt-3 space-y-2 text-[15px]">
-    {#each INDICATORS as i}
-      <li><span class="font-medium">{i.name}</span> <span class="text-muted">· {i.weight}%</span></li>
+    {#each GROUPS as g}
+      <li><span class="font-medium">{g.name}</span> <span class="text-muted">· {g.weight}%</span></li>
     {/each}
   </ul>
   <p class="mt-3 text-[15px]">
+    Trend averages three checks that measure much the same thing (price vs the 200-day average, the 50/200-day averages and MACD), so
+    they count once rather than three times. RSI depends on the trend: a dip in an uptrend counts, a dip in a downtrend doesn’t. For
+    coins that swing a lot, the price has to move further before a check counts.
+  </p>
+  <p class="mt-3 text-[15px]">
     The weighted total gives a score from −100 to +100. +15 or more leans bullish and +50 or more is strong; the same below zero is
-    bearish. Confidence is how many checks agree, lowered when a coin is very volatile or has little history.
+    bearish. Agreement is how many of the checks point the same way. It isn’t a measure of how likely a rating is to be right: in
+    the backtest, ratings the checks agreed on were right only slightly more often over 30 days, and not over 7. Separate cautions are listed when a coin is very volatile,
+    thinly traded or has little history, or when the market mood or most other coins lean the other way. Fear &amp; Greed and the
+    share of coins in an uptrend are shown as context but never change the score.
   </p>
   <p class="mt-3 text-[15px] text-muted">
     These checks only look at past prices and volume. They ignore news, fundamentals and regulation, they lag behind the price, and

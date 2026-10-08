@@ -170,6 +170,8 @@ test('signals screener lists, filters and explains ratings', async ({ page }) =>
   const total = await rows.count();
   expect(total).toBeGreaterThan(40);
   await expect(page.getByRole('link', { name: /^Tether:/ })).toHaveCount(0); // stablecoins aren't rated
+  await expect(page.getByRole('link', { name: /^Tokenised Fund:/ })).toHaveCount(0); // nor is anything else whose price is pegged
+  await expect(rows.first()).toHaveAttribute('aria-label', /(high|medium|low) agreement/);
   await expectNoHorizontalScroll(page);
   await expectTapTargets(page);
   await axe(page);
@@ -184,7 +186,7 @@ test('signals screener lists, filters and explains ratings', async ({ page }) =>
   }
 
   await page.getByRole('button', { name: 'How signals work' }).click();
-  await expect(page.getByRole('dialog', { name: 'How signals work' })).toContainText('Long-term trend');
+  await expect(page.getByRole('dialog', { name: 'How signals work' })).toContainText('Strength vs Bitcoin');
   await page.goBack();
   await expect(page.getByRole('dialog', { name: 'How signals work' })).toBeHidden();
 });
@@ -194,7 +196,8 @@ test('coin page shows its signal with plain-English reasons', async ({ page }) =
   const card = page.getByRole('region', { name: 'Signals' });
   await expect(card).toBeVisible();
   await expect(card).toContainText(/Strong bullish signals|Leaning bullish|Mixed \/ neutral|Leaning bearish|Strong bearish signals/);
-  await expect(card).toContainText('confidence');
+  await expect(card).toContainText(/(High|Medium|Low) agreement/);
+  await expect(card).not.toContainText(/confidence/i);
   await expect(card.getByRole('img', { name: /^Score/ })).toBeVisible();
   await expectNoHorizontalScroll(page);
   await expectTapTargets(page);
@@ -206,17 +209,42 @@ test('coin page shows its signal with plain-English reasons', async ({ page }) =
   await page.waitForTimeout(300);
   const gap = await page.evaluate(() => window.innerHeight - document.querySelector('dialog[open] .sheet-panel')!.getBoundingClientRect().bottom);
   expect(gap).toBeLessThan(1);
-  for (const name of ['Long-term trend', '50/200-day averages', 'Momentum (MACD)', 'RSI (14 days)', 'Trading volume', 'Market mood']) {
+  for (const name of [
+    'Trend',
+    'Price vs 200-day average',
+    '50/200-day averages',
+    'Momentum (MACD)',
+    'Strength vs Bitcoin',
+    'RSI (14 days)',
+    'Trading volume',
+    'Market context',
+    'Market mood',
+  ]) {
     await expect(why).toContainText(name);
   }
+  // Bitcoin is the yardstick, so its own strength check doesn't apply.
+  await expect(why).toContainText('doesn’t apply to Bitcoin itself');
   await expect(why).toContainText('not predictions or financial advice');
   await expect(why).not.toContainText(/\b(buy|sell)\b/i);
   await axe(page);
 });
 
-test('stablecoins say why they are not rated', async ({ page }) => {
+test('other coins are measured against Bitcoin, with market context that never changes the score', async ({ page }) => {
+  await page.goto('/#/asset/ethereum');
+  const card = page.getByRole('region', { name: 'Signals' });
+  await card.getByRole('button', { name: 'See all reasons' }).click();
+  const why = page.getByRole('dialog', { name: 'Why this rating?' });
+  await expect(why).toContainText(/Over 90 days this coin moved [+−]?\d+% and Bitcoin [+−]?\d+%/);
+  await expect(why).toContainText(/\d+% of rated coins are above their 200-day average/);
+  await expect(why).toContainText('Market context never changes the score');
+});
+
+test('stablecoins and other pegged assets say why they are not rated', async ({ page }) => {
   await page.goto('/#/asset/tether');
-  await expect(page.getByText(/is a stablecoin/)).toBeVisible();
+  await expect(page.getByText(/Tether is a pegged asset/)).toBeVisible();
+  // Not on the stablecoin list: recognised because its price barely moves.
+  await page.goto('/#/asset/tokenised-fund');
+  await expect(page.getByText(/Tokenised Fund is a pegged asset/)).toBeVisible();
 });
 
 test('if the ratings service is down, coin pages still work out their own signal', async ({ page }) => {
@@ -255,7 +283,9 @@ test('switching currency converts every price and is remembered', async ({ page 
   await expect(page.getByRole('link', { name: /^Bitcoin, €59,156/ }).first()).toBeVisible();
   await page.goto('/#/asset/bitcoin');
   await expect(page.locator('main').getByText('€59,156').first()).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Signals' })).toContainText('€');
+  // Prices inside the signal explanations convert too.
+  await page.getByRole('region', { name: 'Signals' }).getByRole('button', { name: 'See all reasons' }).click();
+  await expect(page.getByRole('dialog', { name: 'Why this rating?' })).toContainText(/200-day average \(€[\d,]+\)/);
 });
 
 test('yen prices have no decimals', async ({ page }) => {
@@ -293,7 +323,8 @@ test('backtest shows how often signals were right, against the any-day yardstick
   await expect(yardstick).toContainText(/higher 30 days later \d+%/, { timeout: 20_000 });
   const ratings = page.getByRole('region', { name: 'Overall ratings' }).getByRole('listitem');
   await expect(ratings).toHaveCount(5);
-  await expect(page.getByRole('region', { name: 'Each indicator' }).getByRole('listitem')).toHaveCount(6);
+  await expect(page.getByRole('region', { name: 'Each check' }).getByRole('listitem')).toHaveCount(4);
+  await expect(page.getByRole('region', { name: 'Were ratings right more often when the checks agreed?' }).getByRole('listitem')).toHaveCount(3);
   await expect(page.getByText(/\d+ coins · /)).toContainText('20 coins'); // the 20 largest after skipping Tether
   await expectNoHorizontalScroll(page);
   await expectTapTargets(page);

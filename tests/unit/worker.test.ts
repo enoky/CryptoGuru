@@ -134,7 +134,9 @@ describe('worker', () => {
     kv.store.set(
       SIGNALS_KEY,
       JSON.stringify({
+        version: 2,
         asOf: now - 5 * 60_000,
+        market: { btcReturn90d: 12, breadth: 40, breadthCoins: 60 },
         items: {
           a: item('a', 'binance', 1),
           b: item('b', 'binance', 7), // exchange ratings refresh every 2 h: 7 h old is stale
@@ -142,10 +144,29 @@ describe('worker', () => {
           d: item('d', 'coingecko', 17), // stale
         },
         skipped: { c: now, e: now }, // c was retried (still has a rating); e has none
+        pegged: { f: now },
       }),
     );
     const body = (await (await call('/api/health')).json()) as { signals: Record<string, number> };
-    expect(body.signals).toEqual({ rated: 4, stale: 2, fromCoinGecko: 2, unrated: 1, lastRunSecondsAgo: 300 });
+    expect(body.signals).toEqual({
+      rated: 4,
+      stale: 2,
+      fromCoinGecko: 2,
+      unrated: 1,
+      lastRunSecondsAgo: 300,
+      pegged: 1,
+      market: { btcReturn90d: 12, breadth: 40, breadthCoins: 60 },
+    });
+  });
+
+  it('ignores ratings stored in the old format until the next run replaces them', async () => {
+    await call('/api/snapshot');
+    kv.store.set(SIGNALS_KEY, JSON.stringify({ asOf: Date.now(), items: { a: { id: 'a', signals: { mood: 1 } } }, skipped: {} }));
+    const body = (await (await call('/api/signals')).json()) as { version: number; items: object };
+    expect(body.version).toBe(2);
+    expect(body.items).toEqual({});
+    const health = (await (await call('/api/health')).json()) as { signals: { rated: number } };
+    expect(health.signals.rated).toBe(0);
   });
 
   it('requests for unknown coins do not switch a source off', async () => {

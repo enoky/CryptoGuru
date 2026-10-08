@@ -1,6 +1,6 @@
 <script lang="ts">
   import { annualizedVolatility, volatilityLabel } from '../../shared/series';
-  import { computeSignal, isStablecoin } from '../../shared/signals';
+  import { computeSignal, hasPeggedPrice, isPeggedSymbol } from '../../shared/signals';
   import { RANGES, type CandleSet, type Range } from '../../shared/types';
   import Attribution from '../components/Attribution.svelte';
   import ChangeText from '../components/ChangeText.svelte';
@@ -77,18 +77,36 @@
   });
 
   const volatility = $derived(daily ? annualizedVolatility(daily.candles) : null);
-  const stable = $derived(asset ? isStablecoin(asset.symbol) : false);
+  /** Stablecoins, gold tokens and anything else whose price barely moves (the server's check, or this page's own). */
+  const pegged = $derived(
+    (asset ? isPeggedSymbol(asset.symbol) : false) || signalsState.doc?.pegged[id] != null || (daily ? hasPeggedPrice(daily.candles) : false),
+  );
   /**
    * The server's rating when it's recent, so this page and the Signals list always agree.
    * Otherwise (missing, stale, or the server is down) it's worked out here from the page's own chart data.
    */
   const signal = $derived.by(() => {
-    if (stable) return null;
+    if (pegged) return null;
     const server = signalsState.doc?.items[id];
     if (server && Date.now() - server.asOf < 3 * 60 * 60_000) return server;
-    // The page's own calculation needs today's Fear & Greed from market data.
+    // The page's own calculation takes Fear & Greed and liquidity from market data, and Bitcoin's
+    // return and market breadth from the server's ratings when they've loaded.
     if (daily && market.snapshot) {
-      const local = computeSignal(id, daily.candles, daily.source, market.snapshot.fearGreed?.data.value ?? null, daily.asOf);
+      const ctx = signalsState.doc?.market;
+      const turnover = asset?.volume24h != null && asset.marketCap ? (asset.volume24h / asset.marketCap) * 100 : null;
+      const local = computeSignal(
+        id,
+        daily.candles,
+        daily.source,
+        {
+          fearGreed: market.snapshot.fearGreed?.data.value ?? null,
+          btcReturn90d: ctx?.btcReturn90d ?? null,
+          breadth: ctx?.breadth ?? null,
+          turnover,
+          athChangePct: asset?.athChangePct ?? null,
+        },
+        daily.asOf,
+      );
       if (local) return local;
     }
     return server ?? null;
@@ -177,10 +195,13 @@
   </section>
 
   <div class="mt-4">
-    {#if stable}
+    {#if pegged}
       <section class="rounded-2xl border border-line bg-surface p-4 text-[15px]" aria-label="Signals">
         <h2 class="text-sm font-medium text-muted">Signals</h2>
-        <p class="mt-1">{asset?.name} is a stablecoin: its price is designed to stay at about US$1, so trend signals don’t apply.</p>
+        <p class="mt-1">
+          {asset?.name} is a pegged asset: its price is designed to track something outside crypto, such as the US dollar, a
+          money-market fund or gold, so trend signals don’t apply.
+        </p>
       </section>
     {:else if signal}
       <SignalCard {signal} name={asset?.name ?? ''} />

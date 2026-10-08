@@ -1,0 +1,50 @@
+name: Signal backtest (all coins)
+
+# Replays the signal rules on ~1000 days of history for every coin in the top 100,
+# compares them with the pre-Phase-4 rules and two baselines, and publishes the
+# report as the run summary and a downloadable file. Runs whenever the rules
+# change, monthly, and on demand.
+on:
+  push:
+    paths:
+      # The rules and everything they compute from.
+      - shared/signals.ts
+      - shared/backtest.ts
+      - shared/indicators.ts
+      - shared/series.ts
+      - shared/candles.ts
+      - tests/research/**
+      - .github/workflows/backtest.yml
+  schedule:
+    - cron: '43 7 3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run the backtest
+        env:
+          COINGECKO_DEMO_KEY: ${{ secrets.COINGECKO_DEMO_KEY }}
+          BACKTEST_REPORT: backtest-report.md
+        run: npx vitest run --config vitest.research.config.ts
+      - name: Publish the report
+        if: always()
+        run: |
+          if [ -f backtest-report.md ]; then cat backtest-report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backtest-report
+          path: backtest-report.md
+          if-no-files-found: ignore
