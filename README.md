@@ -55,33 +55,34 @@ npm run lighthouse   # speed and quality budgets on the mobile profile (needs Ch
 
 Try the app with fake data and no network: `MOCK_API=1 npm run dev`.
 
-## Deploying (free, about 15 minutes)
+## Deploying (free, about 10 minutes, nothing to install)
 
-Everything runs on Cloudflare's free plan as one Worker that serves both the app and the API. No credit card needed.
+Everything runs on Cloudflare's free plan as one Worker that serves both the app and the API. No credit card needed. GitHub Actions does the deploying.
 
-1. Create a free [Cloudflare account](https://dash.cloudflare.com/sign-up).
-2. Log in and create the KV namespace that stores the market snapshot:
-   ```bash
-   npx wrangler login
-   npx wrangler kv namespace create SNAPSHOTS
-   ```
-   Paste the printed `id` into `wrangler.toml` in place of `REPLACE_WITH_KV_NAMESPACE_ID`.
-3. Optional but recommended: get a free [CoinGecko Demo API key](https://www.coingecko.com/en/api/pricing) (no card) and store it as a secret. It's never sent to the browser.
-   ```bash
-   npx wrangler secret put COINGECKO_DEMO_KEY
-   ```
-4. Deploy:
-   ```bash
-   npm run deploy
-   ```
-   Your app is live at `https://cryptoguru.<your-subdomain>.workers.dev`. Check `/api/health` on it. Signals fill in over the first ~2 hours as coins are rated in batches.
-5. After a day, check **Workers → cryptoguru → Metrics → CPU time** in the Cloudflare dashboard. Free-plan runs are cut off at 10 ms of CPU; if you see errors, lower `BATCH` in `worker/signals.ts`.
+1. **Create a free [Cloudflare account](https://dash.cloudflare.com/sign-up)**, then open **Workers & Pages** once in the dashboard. On a new account it asks you to pick a `workers.dev` subdomain: your app will live at `cryptoguru.<subdomain>.workers.dev`.
+2. **Create an API token:** profile icon → **My Profile → API Tokens → Create Token**, use the **Edit Cloudflare Workers** template, choose your account under *Account Resources* (and *All zones* under *Zone Resources*), then **Continue to summary → Create Token**. Copy the token; it's shown once.
+3. **Find your Account ID:** **Workers & Pages** → it's in the right-hand column (or in the dashboard URL after `dash.cloudflare.com/`).
+4. **Add them to GitHub:** this repository → **Settings → Secrets and variables → Actions → New repository secret**:
+   - `CLOUDFLARE_API_TOKEN`: the token from step 2
+   - `CLOUDFLARE_ACCOUNT_ID`: the id from step 3
+   - `COINGECKO_DEMO_KEY` (optional but recommended): a free [CoinGecko Demo API key](https://www.coingecko.com/en/api/pricing), no card needed. The deploy copies it into the Worker; it's never sent to the browser. The nightly API check uses it too.
+5. **Deploy:** **Actions → Deploy → Run workflow** (after that, every push to `main` deploys by itself). The run's summary shows your URL and a first health check. The KV storage the app needs is created automatically on the first deploy.
+6. **Check it:** open the URL, and `/api/health` on it. Signals fill in over the first ~2 hours as coins are rated in batches.
+7. **After a day:** Cloudflare dashboard → **Workers & Pages → cryptoguru → Metrics → CPU time**. Free-plan runs are cut off at 10 ms of CPU; if you see errors, lower `BATCH` in `worker/signals.ts`.
+
+<details><summary>Deploying from your own computer instead</summary>
+
+```bash
+npx wrangler login
+npx wrangler secret put COINGECKO_DEMO_KEY   # optional; after the first deploy
+npm run deploy
+```
+</details>
 
 **Nightly API check:** `.github/workflows/contract.yml` runs every night (or from the Actions tab) and opens an issue labelled `api-contract` if an API changes. Add `COINGECKO_DEMO_KEY` as a repository secret so it uses your key.
 
 **Optional cookieless analytics:** create a site in Cloudflare → Web Analytics, then add its token as a repository *variable* `CF_ANALYTICS_TOKEN` (or set `VITE_CF_ANALYTICS_TOKEN` when building). No cookies or personal data; the About page mentions it automatically when it's on.
 
-**Automatic deploys:** add `CLOUDFLARE_API_TOKEN` (a token with the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID` as GitHub repository secrets. Every push to `main` then deploys via `.github/workflows/deploy.yml`.
 
 ## Disclaimer
 
