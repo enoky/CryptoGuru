@@ -12,6 +12,7 @@ import {
   type SignalContext,
   type SignalLabel,
   type Checks,
+  toneOf,
 } from './signals';
 import type { Candle } from './types';
 
@@ -33,6 +34,8 @@ export interface Reading {
   metrics: Metrics;
   signals: Checks['signals'];
   label: SignalLabel | null;
+  /** −100…+100, or null when there was no rating. */
+  score: number | null;
   agreement: Agreement | null;
   /** Return over the next 7 / 30 days, as a fraction; null near the end of the data. */
   returns: Record<Horizon, number | null>;
@@ -120,7 +123,7 @@ export function readings(
     const combined = combine(signals, metrics);
     const returns = {} as Record<Horizon, number | null>;
     for (const h of HORIZONS) returns[h] = i + h < daily.length ? daily[i + h].c / day.c - 1 : null;
-    out.push({ t: day.t, metrics, signals, label: combined?.label ?? null, agreement: combined?.agreement ?? null, returns });
+    out.push({ t: day.t, metrics, signals, label: combined?.label ?? null, score: combined?.score ?? null, agreement: combined?.agreement ?? null, returns });
   }
   return out;
 }
@@ -133,7 +136,7 @@ export interface Tally {
   sum: number;
 }
 
-/** Directional calls (bullish or bearish ratings) and how many the price then agreed with. */
+/** Directional calls (uptrend or downtrend ratings) and how many the price then agreed with. */
 export interface Hits {
   n: number;
   right: number;
@@ -148,15 +151,15 @@ function add(t: Tally, r: number) {
   t.sum += r;
 }
 
-export const LABELS: SignalLabel[] = ['Strong bullish signals', 'Leaning bullish', 'Mixed / neutral', 'Leaning bearish', 'Strong bearish signals'];
+export const LABELS: SignalLabel[] = ['Strong uptrend', 'Uptrend', 'No clear trend', 'Downtrend', 'Strong downtrend'];
 export const AGREEMENTS: Agreement[] = ['High', 'Medium', 'Low'];
 
 export interface HorizonResult {
   /** Every evaluated coin-day: the yardstick for everything else. */
   baseline: Tally;
-  groups: Record<GroupKey, { bullish: Tally; bearish: Tally; neutral: Tally }>;
+  groups: Record<GroupKey, { up: Tally; down: Tally; neutral: Tally }>;
   labels: Record<SignalLabel, Tally>;
-  /** Bullish and bearish ratings by agreement: were ratings the checks agreed on more often right? */
+  /** Uptrend and downtrend ratings by agreement: were ratings the checks agreed on more often right? */
   calls: Record<Agreement, Hits>;
 }
 
@@ -169,7 +172,7 @@ export interface BacktestResult {
 
 export function emptyHorizon(): HorizonResult {
   const groups = {} as HorizonResult['groups'];
-  for (const g of GROUPS) groups[g.key] = { bullish: emptyTally(), bearish: emptyTally(), neutral: emptyTally() };
+  for (const g of GROUPS) groups[g.key] = { up: emptyTally(), down: emptyTally(), neutral: emptyTally() };
   const labels = {} as HorizonResult['labels'];
   for (const l of LABELS) labels[l] = emptyTally();
   const calls = {} as HorizonResult['calls'];
@@ -181,7 +184,7 @@ export function emptyResult(): BacktestResult {
   return { coins: [], from: Infinity, to: -Infinity, horizons: { 7: emptyHorizon(), 30: emptyHorizon() } };
 }
 
-const toneOfLabel = (l: SignalLabel) => (l.includes('bullish') ? 1 : l.includes('bearish') ? -1 : 0);
+const toneOfLabel = (l: SignalLabel) => ({ up: 1, down: -1, neutral: 0 })[toneOf(l)];
 
 /** Add one coin's readings into the running result. */
 export function tally(result: BacktestResult, coinId: string, rs: Reading[]): BacktestResult {
@@ -198,7 +201,7 @@ export function tally(result: BacktestResult, coinId: string, rs: Reading[]): Ba
       for (const g of GROUPS) {
         const s = dirOf(r.signals[g.key]);
         if (s == null) continue;
-        add(hr.groups[g.key][s === 1 ? 'bullish' : s === -1 ? 'bearish' : 'neutral'], ret);
+        add(hr.groups[g.key][s === 1 ? 'up' : s === -1 ? 'down' : 'neutral'], ret);
       }
       if (r.label) {
         add(hr.labels[r.label], ret);

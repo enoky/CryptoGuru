@@ -153,7 +153,7 @@ All signals come from **daily closes (up to 365)** plus volume, with no machine 
 
 ### Checks (Phase 4 rules)
 
-The score comes from four groups. Each reads from −1 (bearish) to +1 (bullish); distances are **graded** (0 inside a neutral band, rising in a straight line to ±1 at a "full" value) rather than just +1/0/−1. For coins more volatile than 60% a year, every band and full value is widened in proportion, up to 3× (`volScale`), so a 2% move counts for BTC but not for a coin that swings 150% a year.
+The score comes from four groups. Each reads from −1 (pointing down) to +1 (pointing up); distances are **graded** (0 inside a neutral band, rising in a straight line to ±1 at a "full" value) rather than just +1/0/−1. For coins more volatile than 60% a year, every band and full value is widened in proportion, up to 3× (`volScale`), so a 2% move counts for BTC but not for a coin that swings 150% a year.
 
 | Group | Weight | How it's read |
 |---|---|---|
@@ -175,20 +175,20 @@ The score comes from four groups. Each reads from −1 (bearish) to +1 (bullish)
 
   | Score | Label shown |
   |---|---|
-  | ≥ 50 | Strong bullish signals |
-  | 15 to 49 | Leaning bullish |
-  | −14 to 14 | Mixed / neutral |
-  | −49 to −15 | Leaning bearish |
-  | ≤ −50 | Strong bearish signals |
+  | ≥ 50 | Strong uptrend |
+  | 15 to 49 | Uptrend |
+  | −14 to 14 | No clear trend |
+  | −49 to −15 | Downtrend |
+  | ≤ −50 | Strong downtrend |
 
-- **Agreement** (High / Medium / Low): how many of the scored checks point the same way. A group counts as bullish or bearish from ±0.25; agreement is the share of all groups with data that point the overall way, so a neutral group doesn't agree (≥ 75% High, ≥ 50% Medium: 2 of 4 is Medium, 3 of 4 High); for a Mixed rating, the share of groups that are themselves neutral. Counting groups rather than single indicators stops three trend checks from "agreeing" with each other. It was called *confidence* until the first all-coins backtest showed that ratings the checks agreed on weren't right more often, so it's named for what it measures, and the app says so.
+- **Agreement** (High / Medium / Low): how many of the scored checks point the same way. A group counts as pointing up or down from ±0.25; agreement is the share of all groups with data that point the overall way, so a neutral group doesn't agree (≥ 75% High, ≥ 50% Medium: 2 of 4 is Medium, 3 of 4 High); for a Mixed rating, the share of groups that are themselves neutral. Counting groups rather than single indicators stops three trend checks from "agreeing" with each other. It was called *confidence* until the first all-coins backtest showed that ratings the checks agreed on weren't right more often, so it's named for what it measures, and the app says so.
 - **Cautions**, listed with the rating but changing neither the score nor the agreement: volatility > 80%; fewer than 3 groups with data; thin trading (24h volume < 1% of market cap); and market context leaning against the rating (bullish in extreme greed (≥ 75) or with breadth < 25%; bearish in extreme fear (≤ 25) or with breadth > 75%).
-- **Wording rules:** never say "buy" or "sell", never predict a price, and always phrase signals as past behavior ("has been", "is above").
+- **Wording rules:** never say "buy" or "sell", never predict a price, and always phrase signals as past behavior ("has been", "is above"). Since Phase 5 the labels describe the trend (uptrend / downtrend) instead of *bullish* / *bearish*, which sounded like a forecast: eight years of backtests showed the ratings aren't one.
 
 ### How a rating is shown
 Each asset page has a **"Why this rating?"** panel listing every indicator with its value, threshold, result and one sentence, for example:
 
-> **Leaning bullish · Medium agreement**
+> **Uptrend · Medium agreement**
 > - ✅ **Trend** (+0.7): The trend is up: 3 of three trend checks point up. Below it, each part, e.g. "Price ($64,210) is 8% above its 200-day average ($59,400)."
 > - ✅ **Strength vs Bitcoin** (+0.4): Over 90 days this coin moved +38% and Bitcoin +12%: it has outperformed Bitcoin by 26 percentage points.
 > - ➖ **RSI** (0): RSI is 58: neither overbought nor oversold.
@@ -232,7 +232,7 @@ The goal is a rating that is **honest and calibrated**, not one that "predicts" 
 1. **Confidence renamed to Agreement.** Tuning it on the older half would just fit one market regime, so the rule stays, named for what it measures, and it now measures only that: volatility, thin trading, few checks and market context are listed as separate cautions instead of lowering the level. The app says agreement isn't a measure of how likely a rating is to be right, and the backtest page asks "Were ratings right more often when the checks agreed?"
 2. **Pegged assets found by price, not only by list.** Any coin whose last 90 days (at least 30) move less than 10% a year, annualized, counts as pegged (`hasPeggedPrice`): tokenised money-market funds, newer stablecoins, euro tokens. Even Bitcoin's quietest stretches stay far above that; the euro moves about 7% a year against the dollar. Gold tokens move like gold (about 15%), so they're on the symbol list (`PEGGED_SYMBOLS`) with the stablecoins. The Worker records pegged coins (`pegged` in the signals document, a count in `/api/health`), doesn't rate them, and checks again once a day; coin pages explain why there's no rating; both backtests leave them out.
 
-**Step 4: futures data (not started) ⚠ verify before build**
+**Step 4: futures data (moved to Phase 5, Step 5) ⚠ verify before build**
 - **Funding rate and open interest** from a public futures API (Binance `fapi/v1/premiumIndex` returns every symbol in one request; Bybit and OKX have equivalents). Very high positive funding means a crowded leveraged long; it would be a caution. Strongly negative funding reads as crowded shorts.
 - Waits on the Worker CPU check: parsing every symbol's funding on each snapshot run adds CPU to the heavier cron. Binance futures also blocks US IP addresses; check from the Worker first and fall back to Bybit or OKX. Budget: 1 request per snapshot run.
 
@@ -245,6 +245,59 @@ The goal is a rating that is **honest and calibrated**, not one that "predicts" 
 - **Tuning thresholds to the backtest:** with about two market regimes of history, it would mostly fit noise.
 
 **Constraints:** new inputs must fit the free plan's 50 requests and 10 ms of CPU per Worker run. Fewer, tested checks beat many tuned ones, and every threshold is documented in `shared/signals.ts`.
+
+### Phase 5: accuracy (Step 1 built; Steps 2–4 tested and not shipped)
+
+The goal: get from "barely better than chance" to a **modest, measurable edge**, honestly measured. A reliable price forecast from free public data isn't on offer, so success means a few percentage points that hold up on years the rules were never tuned on. Every rating stays explainable and every threshold stays in `shared/signals.ts`.
+
+**Why now.** The in-app backtest (20 coins, next 7 days) shows where the rules stand: only *Strong bearish* clearly beat chance (lower 57% of the time vs 52% on any day); *Strong bullish* did worse than any day (higher 44% vs 48%); the *Leaning* ratings were noise. The averages were in the right order (+1.7% after Strong bullish, −0.9% after Strong bearish), so the extremes carry a little information. The all-coins backtest showed the same rules pointing the wrong way in one year and the right way in the next.
+
+**Step 1: test on much more history (backtest only; no runtime cost)**
+- Page Binance daily candles backwards with `startTime` (1,000 per request) to each coin's listing, back to 2017 for the oldest: about 3 requests per coin, in the GitHub backtest only.
+- Report results **per calendar year and per market phase** (Bitcoin above or below its 200-day average), not just two halves, so a rule has to work across several bull markets, crashes and sideways stretches.
+- **Fixed validation split:** any tuning may look only at 2017–2022; 2023 onward is the held-out test and is reported separately.
+- Done when: the report covers at least 5 years for the large coins and shows each rule's spread per year.
+
+**Step 2: rate coins against the market, not just up or down**
+- Most misses come from the whole market moving: when everything falls, every bullish call looks wrong. The repeatedly documented crypto pattern is **relative momentum**: coins that beat the market over recent weeks have tended to keep beating it for a while (e.g. Liu, Tsyvinski & Wu, *Common Risk Factors in Cryptocurrency*, Journal of Finance 2022) ⚠ verify the paper's horizons before build.
+- Measure each check's result against the market (the equal-weighted average of rated coins) rather than against zero: "did this coin do better than the market over the next 7 / 30 days?". The backtest adds top-fifth vs bottom-fifth relative returns.
+- Then decide, on the 2017–2022 data only, whether the main rating should become relative ("stronger / weaker than the market", described as past behaviour, never as a prediction) with the up/down reading kept as context, or stay as it is.
+- Done when: the backtest reports relative results, and the decision and its evidence are written here.
+
+**Step 3: stay neutral in choppy markets**
+- Trend rules get whipsawed when the market keeps reversing. Detect it with simple, explainable measures: Bitcoin's 30-day **efficiency ratio** (net move ÷ sum of daily moves; near 0 is zigzag, near 1 a clean trend) and how often market breadth crossed 50% in the last 30 days.
+- In a choppy market, directional ratings become *Mixed* with the reason shown ("the market is choppy, so trend signals are unreliable"). Fewer calls, better ones.
+- Thresholds chosen on 2017–2022 only.
+
+**Step 4: fewer, stronger calls**
+- Test raising the *Leaning* bands (±15 today) to ±25 or ±30 so only clear cases get a bullish or bearish label. More coins will read *Mixed*; that's the honest answer for them.
+
+**Step 5: futures positioning (was Phase 4, Step 4) ⚠ verify before build**
+- Funding rate and open interest show when leveraged traders are crowded on one side, which often comes before sharp reversals. The only candidate that adds information beyond the price chart.
+- Waits on the Worker CPU check (it adds a large JSON parse to the snapshot run), and needs checking that the futures APIs answer from Cloudflare (Binance futures blocks US IP addresses; Bybit and OKX as fallbacks). Shown as context and a caution first; scored only if the backtest supports it (futures history: Binance `fundingRate` endpoint, back to 2019).
+
+**Not planned:** more indicators built from the same prices (Bollinger bands, stochastics: they repeat the checks we have); tuning until the backtest looks good; machine learning (overfits, and ratings could no longer be explained).
+
+**Acceptance:** on the held-out years (2023 onward), the Phase 5 rules have a positive 30-day spread in most years and a higher average spread than both the current rules and 90-day momentum; if Step 2 is adopted, top-fifth coins beat bottom-fifth coins relative to the market in most held-out years; every rating still explains every input; Worker CPU stays under 10 ms per run. If a step doesn't beat the current rules on held-out years, it isn't shipped, and the result is recorded here either way.
+
+**Results** ([`docs/backtest.md`](docs/backtest.md); 50 coins with Binance history, March 2018 to September 2026; 2019–2022 tuning, 2023–2026 held-out; fewer than 10 coins had history in 2018, so it isn't scored):
+
+| Next 30 days, spread averaged year by year | Tuning years | Held-out years | Held-out years positive |
+|---|---|---|---|
+| Current rules | −8.1 | −2.0 | 2 of 4 |
+| Rules before Phase 4 | −7.2 | −2.7 | 1 of 4 |
+| 90-day momentum | −2.6 | −1.8 | 1 of 4 |
+| Step 3: choppy-market filter (picked: efficiency < 0.1) | −8.2 | −1.1 | 2 of 4 |
+| Step 4: stricter bands (picked: ±40) | −5.8 | −2.5 | 2 of 4 |
+| Step 2: top/bottom fifth vs the market (picked: 90-day return) | +2.9 | −0.9 | 1 of 4 |
+
+- **Step 1 (built):** the backtest pages Binance back to each coin's listing, reports each year, market phase, tuning and held-out years, and scores against the market too (`tests/research/history.ts`, `compare.ts`).
+- **As up/down calls the ratings have had no edge**, and on average a negative one at 30 days: the current rules were negative in 6 of 8 years (worst 2020, when downtrend ratings around the March crash were followed by big rebounds). The earlier two-year test happened to include one of the good years.
+- **Steps 2–4 fail the acceptance rule** and aren't shipped. Ranking by 7-day return looked good on the held-out years (+2.5, 3 of 4) but wasn't what the tuning years picked; choosing it now would be choosing with hindsight.
+- **Against the market:** any coin beat the equal-weighted average only 37.8% of the time (a few big winners pull it up). Down-pointing checks "lagged" 62% of the time, which is that base rate, not skill. Up-pointing checks beat it about 2 points more often than any coin, RSI dips in an uptrend about 11 points more (49.3%): worth watching, not proof.
+- **Agreement:** unrelated to being right (held-out: High 44.8%, Low 48.3%).
+- **Decision:** the labels now describe instead of forecast. *Strong bullish signals / Leaning bullish / Mixed / Leaning bearish / Strong bearish signals* became **Strong uptrend / Uptrend / No clear trend / Downtrend / Strong downtrend**; explanations no longer claim what "has often" happened next; the About page says the ratings summarise the recent past and that backtests since 2019 found them no reliable guide to the next month. The signals document moved to format version 3, so ratings are rebuilt over about 2 hours after deploying.
+- **Step 5 (futures positioning)** is still untested and waits on the Worker CPU check.
 
 ---
 
@@ -302,7 +355,7 @@ A web app manifest and icons let users "Add to Home Screen" on Android and iOS. 
 ### Accessibility (WCAG 2.1 AA)
 - Text contrast of at least 4.5:1, checked in bright-sunlight-friendly light mode too.
 - **Up and down are never shown by color alone**: ▲/▼ arrows and +/− signs always accompany them, and the palette is blue/orange rather than red/green so it works for colorblind users.
-- Works with VoiceOver and TalkBack: each coin row reads as one item ("Bitcoin, 64,210 dollars, up 2.1 percent, leaning bullish").
+- Works with VoiceOver and TalkBack: each coin row reads as one item ("Bitcoin, 64,210 dollars, up 2.1 percent, uptrend").
 - Layout holds up with phone text size set to 200%.
 - Full keyboard navigation, visible focus rings, and skip-to-content on desktop.
 - Charts have a visually hidden data-table alternative and an `aria-label` summary.
@@ -396,6 +449,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | **2: v1 Signals** | Indicator module with tests; SignalBadge, SignalCard and WhySheet, Signals screener; Fear & Greed and trending widgets; offline app shell and Add to Home Screen (PWA); accessibility pass with axe; currency selector | 1.5–2 weeks | Indicator tests match the reference fixtures to within 0.01; every rating explains every indicator in plain English; no serious axe violations |
 | **3: Polish and trust** | Signal backtest page (how often each signal was followed by a rise or fall); watchlist export/import; optional cookieless analytics; nightly contract job opening issues; news feed only if a source with suitable terms is found | 1.5–2 weeks | The backtest reproduces the documented results; a contract failure opens an issue within 24 h |
 | **4: Signal quality** | Group the trend checks, make RSI depend on the trend, move Fear & Greed to context, graded scores and volatility-scaled thresholds; strength vs BTC, distance from all-time high, market breadth and liquidity; backtest across all coins with walk-forward and calibration checks; futures funding rate if reachable (see §5, *Phase 4*) | 2–3 weeks | On the newer half of the history, the new rules match or beat the current rules and both baselines; High-agreement ratings have a better hit rate than Low (not met: renamed from confidence, see §5); Worker CPU stays under 10 ms per run; every new input is explained in "Why this rating?" |
+| **5: Accuracy** | Backtest back to 2017, reported per year and market phase, tuned on 2017–2022 and tested on 2023 onward; results measured against the market (relative momentum); a choppy-market filter; stricter bullish/bearish bands; futures funding and open interest if reachable (see §5, *Phase 5*) | 1.5–2 weeks | On the held-out years, positive 30-day spread in most years and higher than the current rules and 90-day momentum; steps that don't beat the current rules aren't shipped; Worker CPU under 10 ms per run |
 | **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
@@ -415,7 +469,8 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 
 Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`; the nightly contract check has passed against all live APIs.
 
-- Phase 4: Steps 1–3 built (157 unit tests, 112 browser tests). All-coins backtest: the new rules match the old ones and beat both baselines on the newer half; agreement between the checks predicts being right only weakly at best, so "confidence" is now "agreement"; pegged assets are found by how little their price moves. See §5 *Phase 4*. Step 4 (futures funding) waits on the Worker CPU check.
+- Phase 4: Steps 1–3 built (157 unit tests, 112 browser tests). All-coins backtest: the new rules match the old ones and beat both baselines on the newer half; agreement between the checks predicts being right only weakly at best, so "confidence" is now "agreement"; pegged assets are found by how little their price moves. See §5 *Phase 4*. Futures funding moved to Phase 5.
+- Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 waits on the CPU check. See §5 *Phase 5*.
 
 ---
 

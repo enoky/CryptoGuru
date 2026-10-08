@@ -7,7 +7,7 @@ import type { Candle, SourceName } from './types';
  * nothing is learned or predicted. Explanations are written in the app
  * (src/lib/explain.ts) from the stored metrics.
  *
- * Four scored groups, each from −1 (bearish) to +1 (bullish). The three trend
+ * Four scored groups, each from −1 (pointing down) to +1 (pointing up). The three trend
  * checks measure much the same thing, so they are averaged into one group
  * rather than voting three times. Fear & Greed, market breadth, liquidity and
  * distance from the all-time high are market context: they never change the
@@ -31,7 +31,7 @@ export const TREND_PARTS = [
 
 export type TrendPartKey = (typeof TREND_PARTS)[number]['key'];
 
-/** +1 bullish, −1 bearish, 0 neutral. */
+/** +1 up, −1 down, 0 neutral. */
 export type Sig = 1 | 0 | -1;
 
 export const BTC_ID = 'bitcoin';
@@ -54,7 +54,7 @@ export const THRESHOLDS = {
   /** Thresholds above widen for coins more volatile than this (annualized %), up to `volScaleMax` times. */
   volScaleFrom: 60,
   volScaleMax: 3,
-  /** A group reading counts as bullish or bearish (for agreement and the backtest) from ±0.25. */
+  /** A group reading counts as pointing up or down (for agreement and the backtest) from ±0.25. */
   clear: 0.25,
   highVolatility: 80,
   /** 24h volume under this % of market cap counts as thinly traded. */
@@ -68,10 +68,10 @@ export const THRESHOLDS = {
   minBreadthCoins: 10,
 } as const;
 
-export type SignalLabel = 'Strong bullish signals' | 'Leaning bullish' | 'Mixed / neutral' | 'Leaning bearish' | 'Strong bearish signals';
+export type SignalLabel = 'Strong uptrend' | 'Uptrend' | 'No clear trend' | 'Downtrend' | 'Strong downtrend';
 /** How many of the scored checks point the same way. It says nothing about how often a rating has been right. */
 export type Agreement = 'High' | 'Medium' | 'Low';
-export type Tone = 'bullish' | 'bearish' | 'neutral';
+export type Tone = 'up' | 'down' | 'neutral';
 
 /** Reasons to treat a rating with extra caution, listed with it. They don't change the score or the agreement. */
 export type Caution = 'volatile' | 'fewChecks' | 'thin' | 'greed' | 'fear' | 'weakMarket' | 'strongMarket';
@@ -137,7 +137,7 @@ export interface MarketContext {
 }
 
 /** Bumped when CoinSignal changes shape, so old stored ratings are dropped rather than misread. */
-export const SIGNALS_VERSION = 2;
+export const SIGNALS_VERSION = 3;
 
 export interface SignalsDoc {
   version: typeof SIGNALS_VERSION;
@@ -287,12 +287,16 @@ export function classify(m: Metrics): Checks {
 }
 
 export function labelFor(score: number): { label: SignalLabel; tone: Tone } {
-  if (score >= 50) return { label: 'Strong bullish signals', tone: 'bullish' };
-  if (score >= 15) return { label: 'Leaning bullish', tone: 'bullish' };
-  if (score > -15) return { label: 'Mixed / neutral', tone: 'neutral' };
-  if (score > -50) return { label: 'Leaning bearish', tone: 'bearish' };
-  return { label: 'Strong bearish signals', tone: 'bearish' };
+  if (score >= 50) return { label: 'Strong uptrend', tone: 'up' };
+  if (score >= 15) return { label: 'Uptrend', tone: 'up' };
+  if (score > -15) return { label: 'No clear trend', tone: 'neutral' };
+  if (score > -50) return { label: 'Downtrend', tone: 'down' };
+  return { label: 'Strong downtrend', tone: 'down' };
 }
+
+/** The direction a rating's label describes. */
+export const toneOf = (label: SignalLabel): Tone =>
+  label === 'Strong uptrend' || label === 'Uptrend' ? 'up' : label === 'Strong downtrend' || label === 'Downtrend' ? 'down' : 'neutral';
 
 export interface Combined {
   score: number;
@@ -318,8 +322,8 @@ export function combine(signals: Record<GroupKey, number | null>, m: Metrics): C
   const score = Math.round((available.reduce((a, g) => a + g.weight * signals[g.key]!, 0) / totalWeight) * 100) || 0;
   const { label, tone } = labelFor(score);
 
-  const dir: Sig = tone === 'bullish' ? 1 : tone === 'bearish' ? -1 : 0;
-  // Neutral checks count as not agreeing with a bullish or bearish rating: 2 of 4 pointing up is Medium, not High.
+  const dir: Sig = tone === 'up' ? 1 : tone === 'down' ? -1 : 0;
+  // Neutral checks count as not agreeing with an up or down rating: 2 of 4 pointing up is Medium, not High.
   const share = available.filter((g) => dirOf(signals[g.key]) === dir).length / available.length;
   const agreement: Agreement = share >= 0.75 ? 'High' : share >= 0.5 ? 'Medium' : 'Low';
 
@@ -358,7 +362,7 @@ export function marketContext(items: Record<string, CoinSignal>): MarketContext 
 
 /** The groups that most support the overall reading, strongest first. */
 export function topReasons(s: Pick<CoinSignal, 'signals' | 'tone'>, n = 2): GroupKey[] {
-  const dir: Sig = s.tone === 'bullish' ? 1 : s.tone === 'bearish' ? -1 : 0;
+  const dir: Sig = s.tone === 'up' ? 1 : s.tone === 'down' ? -1 : 0;
   return GROUPS.filter((g) => dirOf(s.signals[g.key]) === dir)
     .map((g) => ({ key: g.key, w: g.weight * (dir === 0 ? 1 : Math.abs(s.signals[g.key]!)) }))
     .sort((a, b) => b.w - a.w)

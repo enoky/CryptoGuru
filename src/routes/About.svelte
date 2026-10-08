@@ -20,9 +20,10 @@
       ],
     },
     {
-      title: 'How do signals work?',
+      title: 'How do the trend ratings work?',
       body: [
-        'Each coin gets six simple checks on its daily prices: its long-term trend (price against the 200-day average), the 50-day against the 200-day average, momentum (MACD), RSI, trading volume, and the market-wide Fear & Greed Index. Each check is bullish, bearish or neutral, and they combine into a score from −100 to +100.',
+        'Each coin gets four checks on its daily prices: its trend (price against the 200-day average, the 50-day against the 200-day average, and MACD momentum), its strength against Bitcoin, RSI, and trading volume. They combine into a score from −100 to +100, shown as Strong uptrend, Uptrend, No clear trend, Downtrend or Strong downtrend.',
+        'The ratings describe what a coin’s price has been doing; they don’t say what it will do next. Backtests on every year since 2019 found that an uptrend or downtrend rating was not a reliable guide to the following month, so treat them as a summary of the recent past, not advice.',
         'Every rating lists every check behind it in plain English, so you can see exactly why. The checks only look at past prices and volume: they ignore news, fundamentals and regulation, they lag behind the price, and they often fail in sideways markets. They are not predictions.',
       ],
     },

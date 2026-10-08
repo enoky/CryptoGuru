@@ -14,11 +14,11 @@
 
   void startSignals();
 
-  type FilterKey = 'all' | 'bullish' | 'bearish' | 'beatingBtc' | 'oversold' | 'overbought' | 'above200' | 'volume';
+  type FilterKey = 'all' | 'up' | 'down' | 'beatingBtc' | 'oversold' | 'overbought' | 'above200' | 'volume';
   const FILTERS: { key: FilterKey; label: string; test: (s: CoinSignal) => boolean }[] = [
     { key: 'all', label: 'All', test: () => true },
-    { key: 'bullish', label: 'Bullish', test: (s) => s.tone === 'bullish' },
-    { key: 'bearish', label: 'Bearish', test: (s) => s.tone === 'bearish' },
+    { key: 'up', label: 'Uptrend', test: (s) => s.tone === 'up' },
+    { key: 'down', label: 'Downtrend', test: (s) => s.tone === 'down' },
     { key: 'beatingBtc', label: 'Beating Bitcoin', test: (s) => (s.signals.strength ?? 0) >= THRESHOLDS.clear },
     { key: 'oversold', label: 'Oversold', test: (s) => s.metrics.rsi != null && s.metrics.rsi < THRESHOLDS.rsiOversold },
     { key: 'overbought', label: 'Overbought', test: (s) => s.metrics.rsi != null && s.metrics.rsi > THRESHOLDS.rsiOverbought },
@@ -26,7 +26,9 @@
     { key: 'volume', label: 'Unusual volume', test: (s) => s.metrics.volumeRatio != null && s.metrics.volumeRatio > THRESHOLDS.volumeRatio },
   ];
 
-  let filter = $state<FilterKey>(lsGet<FilterKey>('signals:filter', 'all'));
+  // A filter saved before the labels changed ('bullish') falls back to All.
+  const saved = lsGet<FilterKey>('signals:filter', 'all');
+  let filter = $state<FilterKey>(FILTERS.some((f) => f.key === saved) ? saved : 'all');
   let howOpen = $state(false);
 
   const byId = $derived(new Map(assets().map((a) => [a.id, a])));
@@ -36,7 +38,7 @@
     return items
       .map((s) => ({ s, a: byId.get(s.id) }))
       .filter((r): r is { s: CoinSignal; a: Asset } => !!r.a && f.test(r.s))
-      .sort((x, y) => (filter === 'bearish' ? x.s.score - y.s.score : y.s.score - x.s.score) || x.a.rank - y.a.rank);
+      .sort((x, y) => (filter === 'down' ? x.s.score - y.s.score : y.s.score - x.s.score) || x.a.rank - y.a.rank);
   });
   const total = $derived(Object.keys(signalsState.doc?.items ?? {}).length);
   const asOf = $derived(signalsState.doc?.asOf ?? 0);
@@ -85,7 +87,7 @@
   </div>
 {:else}
   <p class="mt-3 px-1 text-sm text-muted" aria-live="polite">
-    {rows.length} of {total} coins{filter === 'bearish' ? ', most bearish first' : filter === 'all' ? ', most bullish first' : ''}
+    {rows.length} of {total} coins{filter === 'down' ? ', strongest downtrend first' : filter === 'all' ? ', strongest uptrend first' : ''}
   </p>
   {#if rows.length === 0}
     <div class="mt-2 rounded-2xl border border-line bg-surface p-5 text-center">
@@ -103,8 +105,8 @@
             <Logo src={a.image} symbol={a.symbol} />
             <div class="min-w-0">
               <div class="truncate font-medium">{a.name}</div>
-              <div class="truncate text-sm {s.tone === 'bullish' ? 'text-up' : s.tone === 'bearish' ? 'text-down' : 'text-muted'}">
-                <span aria-hidden="true">{s.tone === 'bullish' ? '▲' : s.tone === 'bearish' ? '▼' : '–'}</span>
+              <div class="truncate text-sm {s.tone === 'up' ? 'text-up' : s.tone === 'down' ? 'text-down' : 'text-muted'}">
+                <span aria-hidden="true">{s.tone === 'up' ? '▲' : s.tone === 'down' ? '▼' : '–'}</span>
                 {s.label}<span class="text-muted">{` · ${s.agreement} agreement`}</span>
               </div>
             </div>
@@ -129,7 +131,7 @@
 
 <BottomSheet bind:open={howOpen} title="How signals work">
   <p class="text-[15px]">
-    Each coin gets four checks on its daily prices. Each reads from −1 (bearish) to +1 (bullish) and counts by its weight:
+    Each coin gets four checks on its daily prices. Each reads from −1 (pointing down) to +1 (pointing up) and counts by its weight:
   </p>
   <ul class="mt-3 space-y-2 text-[15px]">
     {#each GROUPS as g}
@@ -142,8 +144,8 @@
     coins that swing a lot, the price has to move further before a check counts.
   </p>
   <p class="mt-3 text-[15px]">
-    The weighted total gives a score from −100 to +100. +15 or more leans bullish and +50 or more is strong; the same below zero is
-    bearish. Agreement is how many of the checks point the same way. It isn’t a measure of how likely a rating is to be right: in
+    The weighted total gives a score from −100 to +100. +15 or more is an uptrend and +50 or more a strong one; the same below zero is
+    a downtrend. Agreement is how many of the checks point the same way. It isn’t a measure of how likely a rating is to be right: in
     the backtest, ratings the checks agreed on were right only slightly more often over 30 days, and not over 7. Separate cautions are listed when a coin is very volatile,
     thinly traded or has little history, or when the market mood or most other coins lean the other way. Fear &amp; Greed and the
     share of coins in an uptrend are shown as context but never change the score.

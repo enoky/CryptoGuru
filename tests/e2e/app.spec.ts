@@ -176,13 +176,13 @@ test('signals screener lists, filters and explains ratings', async ({ page }) =>
   await expectTapTargets(page);
   await axe(page);
 
-  await page.getByRole('button', { name: 'Bearish', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Bearish', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  const bearish = await rows.count();
-  expect(bearish).toBeGreaterThan(0);
-  expect(bearish).toBeLessThan(total);
+  await page.getByRole('button', { name: 'Downtrend', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Downtrend', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const down = await rows.count();
+  expect(down).toBeGreaterThan(0);
+  expect(down).toBeLessThan(total);
   for (const label of await rows.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))) {
-    expect(label).toMatch(/bearish/i);
+    expect(label).toMatch(/downtrend/i);
   }
 
   await page.getByRole('button', { name: 'How signals work' }).click();
@@ -195,7 +195,9 @@ test('coin page shows its signal with plain-English reasons', async ({ page }) =
   await page.goto('/#/asset/bitcoin');
   const card = page.getByRole('region', { name: 'Signals' });
   await expect(card).toBeVisible();
-  await expect(card).toContainText(/Strong bullish signals|Leaning bullish|Mixed \/ neutral|Leaning bearish|Strong bearish signals/);
+  await expect(card).toContainText(/Strong uptrend|Uptrend|No clear trend|Downtrend|Strong downtrend/);
+  // Ratings describe the trend; they never use forecast words.
+  await expect(card).not.toContainText(/bullish|bearish/i);
   await expect(card).toContainText(/(High|Medium|Low) agreement/);
   await expect(card).not.toContainText(/confidence/i);
   await expect(card.getByRole('img', { name: /^Score/ })).toBeVisible();

@@ -107,21 +107,21 @@ describe('tally', () => {
       const r = res.horizons[h];
       for (const g of GROUPS) {
         const t = r.groups[g.key];
-        const total = t.bullish.n + t.bearish.n + t.neutral.n;
+        const total = t.up.n + t.down.n + t.neutral.n;
         // No Bitcoin history was supplied, so strength never counts; everything else always has data.
         expect(total).toBe(g.key === 'strength' ? 0 : r.baseline.n);
       }
       expect(Object.values(r.labels).reduce((a, t) => a + t.n, 0)).toBe(r.baseline.n);
-      const directional = rs.filter((x) => x.returns[h] != null && x.label && !x.label.startsWith('Mixed')).length;
+      const directional = rs.filter((x) => x.returns[h] != null && x.label && x.label !== 'No clear trend').length;
       expect(AGREEMENTS.reduce((a, c) => a + r.calls[c].n, 0)).toBe(directional);
     }
   });
 
   it('counts a call as right when the price moved the way the rating leaned', () => {
     const r = tally(emptyResult(), 'x', [
-      { t: 0, metrics: {} as never, signals: {} as never, label: 'Leaning bullish', agreement: 'High', returns: { 7: 0.1, 30: null } },
-      { t: 1, metrics: {} as never, signals: {} as never, label: 'Strong bearish signals', agreement: 'High', returns: { 7: 0.1, 30: null } },
-      { t: 2, metrics: {} as never, signals: {} as never, label: 'Leaning bearish', agreement: 'Low', returns: { 7: -0.1, 30: null } },
+      { t: 0, metrics: {} as never, signals: {} as never, label: 'Uptrend', score: 30, agreement: 'High', returns: { 7: 0.1, 30: null } },
+      { t: 1, metrics: {} as never, signals: {} as never, label: 'Strong downtrend', score: -60, agreement: 'High', returns: { 7: 0.1, 30: null } },
+      { t: 2, metrics: {} as never, signals: {} as never, label: 'Downtrend', score: -20, agreement: 'Low', returns: { 7: -0.1, 30: null } },
     ]).horizons[7];
     expect(r.calls.High).toEqual({ n: 2, right: 1 });
     expect(pctRight(r.calls.Low)).toBe(100);
@@ -134,7 +134,7 @@ describe('tally', () => {
     expect(pctRose(r.baseline)).toBe(100);
     expect(pctFell(r.baseline)).toBe(0);
     expect(avgReturn(r.baseline)).toBeCloseTo((1.01 ** 30 - 1) * 100, 6);
-    expect(r.groups.trend.bullish.n).toBe(r.baseline.n);
+    expect(r.groups.trend.up.n).toBe(r.baseline.n);
   });
 
   it('merges several coins and tracks the date range', () => {
@@ -164,11 +164,11 @@ describe('tally', () => {
     const h = res.horizons[30];
     const summary = {
       baseline: [h.baseline.n, pctRose(h.baseline)!.toFixed(1)],
-      trendBullish: [h.groups.trend.bullish.n, pctRose(h.groups.trend.bullish)!.toFixed(1)],
-      strengthBullish: [h.groups.strength.bullish.n, pctRose(h.groups.strength.bullish)!.toFixed(1)],
-      rsiBullish: [h.groups.rsi.bullish.n, pctRose(h.groups.rsi.bullish)!.toFixed(1)],
-      strongBullish: [h.labels['Strong bullish signals'].n],
-      strongBearish: [h.labels['Strong bearish signals'].n],
+      trendBullish: [h.groups.trend.up.n, pctRose(h.groups.trend.up)!.toFixed(1)],
+      strengthBullish: [h.groups.strength.up.n, pctRose(h.groups.strength.up)!.toFixed(1)],
+      rsiBullish: [h.groups.rsi.up.n, pctRose(h.groups.rsi.up)!.toFixed(1)],
+      strongBullish: [h.labels['Strong uptrend'].n],
+      strongBearish: [h.labels['Strong downtrend'].n],
       highAgreementRight: [h.calls.High.n, pctRight(h.calls.High)!.toFixed(1)],
     };
     expect(summary).toMatchInlineSnapshot(`

@@ -118,7 +118,7 @@ describe('refreshSignals', () => {
     const old = { asOf: NOW - 60_000, items: { bitcoin: { id: 'bitcoin', asOf: NOW - 60_000 } }, skipped: {} } as unknown as SignalsDoc;
     const r = await run(old, [asset('bitcoin', 'BTC', 100)]);
     expect(r.rated).toEqual(['bitcoin']);
-    expect(r.doc.version).toBe(2);
+    expect(r.doc.version).toBe(3);
     expect(r.doc.items.bitcoin.trendParts).toBeDefined();
   });
 

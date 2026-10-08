@@ -13,13 +13,13 @@
   const reasons = $derived(topReasons(signal, 2));
   const fallbackReasons = $derived(reasons.length ? reasons : (['trend', 'rsi'] as const));
   const context = $derived(explainContext(signal.metrics));
-  const toneText = $derived(signal.tone === 'bullish' ? 'text-up' : signal.tone === 'bearish' ? 'text-down' : 'text-fg');
+  const toneText = $derived(signal.tone === 'up' ? 'text-up' : signal.tone === 'down' ? 'text-down' : 'text-fg');
 </script>
 
 <section class="rounded-2xl border border-line bg-surface p-4" aria-labelledby="signal-heading">
   <h2 id="signal-heading" class="text-sm font-medium text-muted">Signals</h2>
   <p class="mt-1 text-xl font-semibold {toneText}">
-    <span aria-hidden="true">{signal.tone === 'bullish' ? '▲' : signal.tone === 'bearish' ? '▼' : '–'}</span>
+    <span aria-hidden="true">{signal.tone === 'up' ? '▲' : signal.tone === 'down' ? '▼' : '–'}</span>
     {signal.label}
   </p>
   <p class="text-sm text-muted">{signal.agreement} agreement · score {formatScore(signal.score)}</p>
@@ -103,9 +103,9 @@
 
   <h3 class="mt-5 font-semibold">How the score works</h3>
   <p class="mt-1 text-[15px] text-muted">
-    Each check reads from −1 (bearish) to +1 (bullish), times its weight; the trend reading is the average of its three parts. The total
-    is scaled to −100…+100 over the checks that had enough data. +15 or more leans bullish, +50 or more is strong; the same below zero
-    for bearish. Agreement is how many of the checks point the same way; it isn’t a measure of how likely the rating is to be right.
+    Each check reads from −1 (pointing down) to +1 (pointing up), times its weight; the trend reading is the average of its three parts.
+    The total is scaled to −100…+100 over the checks that had enough data. +15 or more is an uptrend, +50 or more a strong one; the
+    same below zero for a downtrend. Agreement is how many of the checks point the same way; it isn’t a measure of how likely the rating is to be right.
     Market context never changes the score.
   </p>
   <p class="mt-3 text-sm text-muted">

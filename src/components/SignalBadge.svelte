@@ -6,11 +6,11 @@
 </script>
 
 <span
-  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap {signal.tone === 'bullish'
+  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap {signal.tone === 'up'
     ? 'bg-up/10 text-up'
-    : signal.tone === 'bearish'
+    : signal.tone === 'down'
       ? 'bg-down/10 text-down'
       : 'bg-surface-2 text-muted'}">
-  <span aria-hidden="true">{signal.tone === 'bullish' ? '▲' : signal.tone === 'bearish' ? '▼' : '–'}</span>
+  <span aria-hidden="true">{signal.tone === 'up' ? '▲' : signal.tone === 'down' ? '▼' : '–'}</span>
   {SHORT_LABEL[signal.label]}
 </span>
