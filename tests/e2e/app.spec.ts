@@ -347,3 +347,12 @@ test('a bad watchlist file shows a clear error', async ({ page }) => {
   await sheet.locator('input[type=file]').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('nope') });
   await expect(sheet.getByRole('status')).toContainText('isn’t valid JSON');
 });
+
+test('sheet close buttons keep a full tap target when a long title wraps', async ({ page }) => {
+  // Narrower than any phone project, so the long title has to wrap (font widths vary between machines).
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto('/#/watchlist');
+  await page.getByRole('button', { name: 'Back up or move your watchlist' }).click();
+  await expect(page.getByRole('dialog', { name: 'Back up or move your watchlist' })).toBeVisible();
+  await expectTapTargets(page);
+});
