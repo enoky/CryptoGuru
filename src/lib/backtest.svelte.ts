@@ -16,17 +16,19 @@ interface Cached {
   sources: string[];
 }
 
-export const backtest = $state({
-  status: 'idle' as 'idle' | 'loading' | 'computing' | 'done' | 'error',
+class BacktestState {
+  status = $state<'idle' | 'loading' | 'computing' | 'done' | 'error'>('idle');
   /** Coins downloaded / analysed so far. */
-  done: 0,
-  total: 0,
-  result: null as BacktestResult | null,
-  sources: [] as string[],
-  error: null as string | null,
+  done = $state(0);
+  total = $state(0);
+  result = $state.raw<BacktestResult | null>(null);
+  sources = $state.raw<string[]>([]);
+  error = $state<string | null>(null);
   /** Coins whose history couldn't be downloaded. */
-  missing: [] as string[],
-});
+  missing = $state.raw<string[]>([]);
+}
+
+export const backtest = new BacktestState();
 
 let running = false;
 

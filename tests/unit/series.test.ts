@@ -48,3 +48,12 @@ describe('cleanCandles', () => {
     ]);
   });
 });
+
+describe('roundSig', () => {
+  it('keeps 5 significant figures', async () => {
+    const { roundSig } = await import('../../shared/series');
+    expect(roundSig(64123.456789)).toBe(64123);
+    expect(roundSig(0.000012345678)).toBe(0.000012346);
+    expect(roundSig(0)).toBe(0);
+  });
+});

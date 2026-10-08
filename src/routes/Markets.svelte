@@ -9,11 +9,12 @@
   import Icon from '../components/Icon.svelte';
   import Logo from '../components/Logo.svelte';
   import MarketStrip from '../components/MarketStrip.svelte';
+  import PullToRefresh from '../components/PullToRefresh.svelte';
   import SkeletonRows from '../components/SkeletonRows.svelte';
-  import { assets, market, refresh } from '../lib/market.svelte';
+  import { assets, market, refresh, refreshPrices } from '../lib/market.svelte';
   import { sourceLabel } from '../lib/format';
   import { lsGet, lsSet } from '../lib/storage';
-  import { signalsState, startSignals } from '../lib/signals.svelte';
+  import { refreshSignals, signalsState, startSignals } from '../lib/signals.svelte';
   import { watchlist } from '../lib/watchlist.svelte';
 
   type SortKey = 'rank' | 'change24h' | 'change7d' | 'signal' | 'name';
@@ -186,3 +187,5 @@
     {/each}
   </div>
 </BottomSheet>
+
+<PullToRefresh onrefresh={() => Promise.all([refresh(), refreshPrices(), refreshSignals()])} />

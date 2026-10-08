@@ -4,13 +4,34 @@
   import Icon from '../components/Icon.svelte';
   import Logo from '../components/Logo.svelte';
   import SkeletonRows from '../components/SkeletonRows.svelte';
+  import PullToRefresh from '../components/PullToRefresh.svelte';
+  import SwipeToRemove from '../components/SwipeToRemove.svelte';
   import WatchlistBackup from '../components/WatchlistBackup.svelte';
   import { formatPrice } from '../lib/format';
-  import { assets, market } from '../lib/market.svelte';
+  import { assets, market, refresh, refreshPrices } from '../lib/market.svelte';
   import { moveWatch, replaceWatch, toggleWatch, watchlist } from '../lib/watchlist.svelte';
 
   let editing = $state(false);
   let backupOpen = $state(false);
+  /** The last coin removed, so it can be put back in the same place. */
+  let undo = $state<{ id: string; name: string; index: number } | null>(null);
+  let undoTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function remove(a: Asset) {
+    const index = watchlist.ids.indexOf(a.id);
+    toggleWatch(a.id);
+    undo = { id: a.id, name: a.name, index };
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => (undo = null), 6000);
+  }
+
+  function undoRemove() {
+    if (!undo) return;
+    const ids = watchlist.ids.filter((x) => x !== undo!.id);
+    ids.splice(Math.min(undo.index, ids.length), 0, undo.id);
+    replaceWatch(ids);
+    undo = null;
+  }
   const all = $derived(assets());
   const items = $derived(watchlist.ids.map((id) => all.find((a) => a.id === id)).filter((a): a is Asset => !!a));
   const suggestions = $derived(all.filter((a) => !watchlist.ids.includes(a.id)).slice(0, 5));
@@ -84,14 +105,28 @@
         <span class="min-w-0 flex-1 truncate font-medium">{a.name}</span>
         <button type="button" class="grid size-11 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-30" disabled={i === 0} onclick={() => moveWatch(a.id, -1)} aria-label="Move {a.name} up"><Icon name="up" /></button>
         <button type="button" class="grid size-11 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-30" disabled={i === items.length - 1} onclick={() => moveWatch(a.id, 1)} aria-label="Move {a.name} down"><Icon name="down" /></button>
-        <button type="button" class="grid size-11 place-items-center rounded-full text-danger hover:bg-surface-2" onclick={() => toggleWatch(a.id)} aria-label="Remove {a.name}"><Icon name="close" /></button>
+        <button type="button" class="grid size-11 place-items-center rounded-full text-danger hover:bg-surface-2" onclick={() => remove(a)} aria-label="Remove {a.name}"><Icon name="close" /></button>
       </li>
     {/each}
   </ul>
 {:else}
   <ul class="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
-    {#each items as a (a.id)}<li><AssetRow asset={a} /></li>{/each}
+    {#each items as a (a.id)}
+      <li><SwipeToRemove onremove={() => remove(a)}><AssetRow asset={a} /></SwipeToRemove></li>
+    {/each}
   </ul>
+  <p class="mt-2 px-1 text-sm text-muted">Tip: swipe a coin left to remove it.</p>
 {/if}
+
+{#if undo}
+  <div
+    role="status"
+    class="fixed inset-x-4 bottom-[calc(var(--nav-h)+env(safe-area-inset-bottom)+12px)] z-20 mx-auto flex max-w-md items-center justify-between gap-2 rounded-2xl bg-fg py-1 pr-1 pl-4 text-bg shadow-lg lg:bottom-6">
+    <span>Removed {undo.name}</span>
+    <button type="button" class="min-h-11 rounded-xl px-3 font-semibold underline" onclick={undoRemove}>Undo</button>
+  </div>
+{/if}
+
+<PullToRefresh onrefresh={() => Promise.all([refresh(), refreshPrices()])} />
 
 <WatchlistBackup bind:open={backupOpen} />

@@ -11,7 +11,18 @@
   const fg = $derived(market.snapshot?.fearGreed ?? null);
 </script>
 
-{#if g || fg}
+{#if !g && !fg && market.loading}
+  <!-- Same size as the strip, so nothing below it jumps when data arrives. -->
+  <div class="grid w-full grid-cols-3 gap-2 rounded-2xl border border-line bg-surface p-3" aria-hidden="true">
+    {#each { length: 3 } as _}
+      <div class="space-y-1.5 py-0.5">
+        <div class="h-3 w-16 animate-pulse rounded bg-surface-2"></div>
+        <div class="h-5 w-14 animate-pulse rounded bg-surface-2"></div>
+        <div class="h-3 w-10 animate-pulse rounded bg-surface-2"></div>
+      </div>
+    {/each}
+  </div>
+{:else if g || fg}
   <button
     type="button"
     class="grid w-full grid-cols-3 gap-2 rounded-2xl border border-line bg-surface p-3 text-left hover:bg-surface-2"

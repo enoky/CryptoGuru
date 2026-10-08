@@ -50,7 +50,16 @@ export async function loadPrices(): Promise<PriceMap> {
   return fetchLivePrices(browserFetch, Date.now(), 500);
 }
 
-export async function loadCandles(id: string, symbol: string, refPrice: number, range: Range): Promise<CandleSet> {
+/**
+ * Candles via the Worker need only the coin id, so they can load before market
+ * data does. `coinInfo` (ticker and price, for checking exchange data) is only
+ * awaited if we fall back to calling the exchanges directly.
+ */
+export async function loadCandles(
+  id: string,
+  range: Range,
+  coinInfo: () => Promise<{ symbol: string; price: number } | undefined>,
+): Promise<CandleSet> {
   if (!breaker.isOpen('worker-candles')) {
     try {
       const set = await fromWorker<CandleSet>(`/api/candles/${encodeURIComponent(id)}?range=${range}`);
@@ -61,7 +70,8 @@ export async function loadCandles(id: string, symbol: string, refPrice: number, 
       breaker.failure('worker-candles');
     }
   }
-  return fetchCandleSet({ id, symbol, refPrice, range }, browserFetch, breaker, { now: Date.now(), baseDelayMs: 500 });
+  const info = await coinInfo();
+  return fetchCandleSet({ id, symbol: info?.symbol, refPrice: info?.price, range }, browserFetch, breaker, { now: Date.now(), baseDelayMs: 500 });
 }
 
 /**

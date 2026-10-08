@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { fetchJson, type FetchFn } from '../http';
-import { downsample } from '../series';
+import { downsample, roundSig } from '../series';
 import { fxFromMarketCaps } from '../currency';
 import type { Asset, Candle, GlobalStats, Range, TrendingCoin } from '../types';
 import { finiteOrNull, isPositive, parseItems, parseOne, safeImage } from '../validate';
@@ -97,7 +97,7 @@ export async function fetchMarkets(fetchFn: FetchFn, o: CoinGeckoOptions & { spa
       maxSupply: finiteOrNull(m.max_supply),
       ath: finiteOrNull(m.ath),
       athChangePct: finiteOrNull(m.ath_change_percentage),
-      sparkline: downsample((m.sparkline_in_7d?.price ?? []).filter(isPositive) as number[], 42),
+      sparkline: downsample((m.sparkline_in_7d?.price ?? []).filter(isPositive) as number[], 42).map((p) => roundSig(p)),
     }));
 }
 

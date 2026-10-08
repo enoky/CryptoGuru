@@ -8,7 +8,8 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   // Service workers are off except in offline.spec.ts, so mocked API routes always apply.
   use: { baseURL: 'http://localhost:4173', trace: 'retain-on-failure', serviceWorkers: 'block' },
-  webServer: { command: 'npm run build && npx vite preview --port 4173 --strictPort', port: 4173, reuseExistingServer: !process.env.CI },
+  // MOCK_API=1: any /api request a test doesn't intercept still gets mock data instead of a connection error.
+  webServer: { command: 'npm run build && npx vite preview --port 4173 --strictPort', port: 4173, reuseExistingServer: !process.env.CI, env: { MOCK_API: '1' } },
   projects: [
     { name: 'small-phone-360', use: { ...devices['Galaxy S9+'], viewport: { width: 360, height: 740 }, browserName: 'chromium' } },
     { name: 'iphone-se-375', use: { ...devices['iPhone SE'], viewport: { width: 375, height: 667 }, browserName: 'chromium' } },

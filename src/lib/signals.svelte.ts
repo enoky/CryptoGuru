@@ -1,15 +1,19 @@
 import type { SignalsDoc } from '../../shared/signals';
 import { loadSignals } from './api';
+import { afterFirstPaint } from './paint';
 import { idbGet, idbSet } from './storage';
 
 const KEY = 'signals:v1';
 const POLL_MS = 10 * 60_000;
 
-export const signalsState = $state({
-  doc: null as SignalsDoc | null,
-  loading: true,
-  error: null as string | null,
-});
+class SignalsState {
+  /** Replaced whole on each refresh, so stored raw (not deeply reactive). */
+  doc = $state.raw<SignalsDoc | null>(null);
+  loading = $state(true);
+  error = $state<string | null>(null);
+}
+
+export const signalsState = new SignalsState();
 
 let started = false;
 
@@ -17,9 +21,12 @@ let started = false;
 export async function startSignals() {
   if (started) return;
   started = true;
-  const cached = await idbGet<SignalsDoc>(KEY);
-  if (cached?.items && !signalsState.doc) signalsState.doc = cached;
-  await refreshSignals();
+  await afterFirstPaint();
+  // Saved copy and fresh fetch in parallel; the saved copy shows only if it lands first.
+  const showCached = idbGet<SignalsDoc>(KEY).then((cached) => {
+    if (cached?.items && !signalsState.doc) signalsState.doc = cached;
+  });
+  await Promise.all([showCached, refreshSignals()]);
   setInterval(() => {
     if (document.visibilityState === 'visible') void refreshSignals();
   }, POLL_MS);

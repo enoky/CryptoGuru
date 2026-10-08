@@ -4,10 +4,11 @@
   import BottomSheet from '../components/BottomSheet.svelte';
   import ErrorInline from '../components/ErrorInline.svelte';
   import Logo from '../components/Logo.svelte';
+  import PullToRefresh from '../components/PullToRefresh.svelte';
   import SkeletonRows from '../components/SkeletonRows.svelte';
   import { formatScore } from '../lib/explain';
   import { formatTime } from '../lib/format';
-  import { assets, market } from '../lib/market.svelte';
+  import { assets, market, refresh } from '../lib/market.svelte';
   import { refreshSignals, signalsState, startSignals } from '../lib/signals.svelte';
   import { lsGet, lsSet } from '../lib/storage';
 
@@ -69,7 +70,8 @@
   {/each}
 </div>
 
-{#if signalsState.loading && !signalsState.doc}
+<!-- Wait for coin names too, so the list doesn't appear empty first and then jump. -->
+{#if (signalsState.loading && !signalsState.doc) || (market.loading && !market.snapshot)}
   <div class="mt-3 overflow-hidden rounded-2xl border border-line bg-surface"><SkeletonRows /></div>
 {:else if !signalsState.doc}
   <div class="mt-3">
@@ -143,3 +145,5 @@
     they often fail in sideways markets. They are not predictions or financial advice.
   </p>
 </BottomSheet>
+
+<PullToRefresh onrefresh={() => Promise.all([refreshSignals(), refresh()])} />

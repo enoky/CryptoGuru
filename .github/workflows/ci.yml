@@ -32,3 +32,25 @@ jobs:
           name: playwright-report
           path: test-results/
           retention-days: 7
+
+  lighthouse:
+    # Speed and quality budgets from PLAN.md §7 (mobile profile, mock data). Fails the PR if any is missed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Lighthouse CI
+        run: npm run lighthouse
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          retention-days: 7

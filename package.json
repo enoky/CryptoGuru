@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "worker:dev": "wrangler dev",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "lighthouse": "npm run build && lhci autorun"
   },
   "dependencies": {
     "idb-keyval": "^6.3.0",
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@cloudflare/workers-types": "^5.20261007.1",
+    "@lhci/cli": "^0.15.1",
     "@playwright/test": "1.56.1",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/vite": "^4.3.3",

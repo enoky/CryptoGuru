@@ -22,7 +22,10 @@
 
   onMount(() => {
     let disposed = false;
-    import('lightweight-charts').then(({ createChart, AreaSeries, ColorType, TrackingModeExitMode }) => {
+    // Load the chart library (~170 KB) once the browser is idle, so the rest of the page paints first on slow phones.
+    const whenIdle = (cb: () => void) =>
+      'requestIdleCallback' in window ? requestIdleCallback(cb, { timeout: 600 }) : setTimeout(cb, 50);
+    whenIdle(() => void import('lightweight-charts').then(({ createChart, AreaSeries, ColorType, TrackingModeExitMode }) => {
       if (disposed) return;
       chart = createChart(el, {
         autoSize: true,
@@ -37,7 +40,7 @@
         localization: { priceFormatter: (p: number) => formatPrice(p) },
       });
       series = chart.addSeries(AreaSeries, { lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
-    });
+    }));
     return () => {
       disposed = true;
       chart?.remove();

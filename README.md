@@ -50,7 +50,10 @@ Without `worker:dev`, the app falls back to calling the public APIs straight fro
 npm run check        # typecheck app + Worker
 npm test             # unit tests
 npx playwright test  # browser tests (builds first)
+npm run lighthouse   # speed and quality budgets on the mobile profile (needs Chromium: npx playwright install chromium)
 ```
+
+Try the app with fake data and no network: `MOCK_API=1 npm run dev`.
 
 ## Deploying (free, about 15 minutes)
 

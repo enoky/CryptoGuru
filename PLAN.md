@@ -352,7 +352,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
 
-**Status:** Phases 0–3 are built and tested against mocked APIs (116 unit tests, 92 browser tests at 360/375/412 px phones and desktop).
+**Status:** Phases 0–3 are built, including the Phase 1 leftovers, and tested against mocked APIs (116 unit tests, 92 browser tests at 360/375/412 px phones and desktop).
 - Phase 2: signals; offline app shell and install; currency selector; accessibility checks on every screen and sheet.
 - Phase 3:
   - **Backtest** (`#/signals/backtest`): the live rules replayed on ~1,000 daily candles for the 20 largest non-stable coins, at 7- and 30-day horizons, each result shown next to the "any day" baseline, with caveats (overlapping windows, correlated coins, survivorship, no costs). Engine in `shared/backtest.ts`, tested for no look-ahead, identical rules to live, and a fixed reference result; runs in a Web Worker and is cached for the day. History comes from `/api/history/:id` (Binance, then Kraken; CoinGecko's free plan only has a year) and `/api/fear-greed/history`.
@@ -361,7 +361,11 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
   - **Cookieless analytics:** off unless built with `VITE_CF_ANALYTICS_TOKEN` (Cloudflare Web Analytics).
   - **News feed:** not added; see §1.
 
-Not yet done: verifying against the live APIs and deploying; Lighthouse CI budgets and pull-to-refresh/swipe gestures (Phase 1 leftovers).
+- Phase 1 leftovers:
+  - **Lighthouse CI** (`lighthouserc.cjs`, `ci.yml` job `lighthouse`): mobile profile against the built app with mock data (`MOCK_API=1`), 3 runs × 3 screens, judged on the median run. Every budget in §7 is enforced. Current results: Performance 99–100, Accessibility 100, Best Practices 100, SEO 100; LCP 1.2–1.85 s; CLS 0; TBT under 100 ms; initial JS 55 KB. Getting there fixed real issues: a missing `robots.txt`; layout shift on Markets, Signals and coin pages (now fixed-size placeholders); the coin page waiting on the whole snapshot (sections now load independently, the chart library and 1-year history load when idle, and the coin page shows the server's rating when it is recent, so it always matches the Signals list); big data kept deeply reactive (now stored raw); sparklines sent with 16 digits (now 5).
+  - **Gestures:** pull-to-refresh on Markets, Watchlist and Signals; swipe a watchlist row left to reveal Remove, or further to remove it, with Undo (also for Edit-mode removals). Tested with real touch input on the phone projects.
+
+Not yet done: verifying against the live APIs and deploying.
 
 ---
 

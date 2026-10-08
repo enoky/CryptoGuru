@@ -32,3 +32,6 @@ export function cleanCandles(candles: Candle[]): Candle[] {
   }
   return [...byTime.values()].sort((a, b) => a.t - b.t);
 }
+
+/** Round to `digits` significant figures: plenty for drawing, and much shorter JSON. */
+export const roundSig = (n: number, digits = 5) => (n === 0 || !Number.isFinite(n) ? n : Number(n.toPrecision(digits)));
