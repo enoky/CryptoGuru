@@ -32,7 +32,7 @@
     </a>
     <div class="flex items-center gap-1">
       <CurrencyPicker />
-      <button type="button" class="grid size-11 place-items-center rounded-full hover:bg-surface-2" onclick={cycleTheme} aria-label={themeLabel}>
+      <button type="button" class="grid size-11 shrink-0 place-items-center rounded-full hover:bg-surface-2" onclick={cycleTheme} aria-label={themeLabel}>
         <Icon name={theme.choice === 'system' ? 'auto' : theme.choice === 'dark' ? 'moon' : 'sun'} />
       </button>
     </div>

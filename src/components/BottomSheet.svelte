@@ -66,11 +66,11 @@
     <div class="cursor-grab touch-none" ontouchstart={onTouchStart} ontouchmove={onTouchMove} ontouchend={onTouchEnd} role="presentation">
       <div class="mx-auto mt-2 h-1.5 w-10 rounded-full bg-line lg:hidden"></div>
       <div class="flex items-center justify-between gap-2 py-1 pr-1 pl-5">
-        <h2 id={titleId} class="text-lg font-semibold">{title}</h2>
+        <h2 id={titleId} class="min-w-0 text-lg font-semibold">{title}</h2>
         <button
           bind:this={closeButton}
           type="button"
-          class="grid size-11 place-items-center rounded-full text-muted hover:bg-surface-2"
+          class="grid size-11 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-2"
           onclick={close}
           aria-label="Close">
           <Icon name="close" />

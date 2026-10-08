@@ -54,7 +54,7 @@
     {/if}
     <button
       type="button"
-      class="grid size-11 place-items-center rounded-full text-lg font-bold hover:bg-surface-2"
+      class="grid size-11 shrink-0 place-items-center rounded-full text-lg font-bold hover:bg-surface-2"
       aria-label="Back up or move your watchlist"
       onclick={() => (backupOpen = true)}><span aria-hidden="true">⋯</span></button>
   </div>
@@ -103,9 +103,9 @@
       <li class="flex min-h-16 items-center gap-2 py-2 pr-2 pl-4">
         <Logo src={a.image} symbol={a.symbol} size={28} />
         <span class="min-w-0 flex-1 truncate font-medium">{a.name}</span>
-        <button type="button" class="grid size-11 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-30" disabled={i === 0} onclick={() => moveWatch(a.id, -1)} aria-label="Move {a.name} up"><Icon name="up" /></button>
-        <button type="button" class="grid size-11 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-30" disabled={i === items.length - 1} onclick={() => moveWatch(a.id, 1)} aria-label="Move {a.name} down"><Icon name="down" /></button>
-        <button type="button" class="grid size-11 place-items-center rounded-full text-danger hover:bg-surface-2" onclick={() => remove(a)} aria-label="Remove {a.name}"><Icon name="close" /></button>
+        <button type="button" class="grid size-11 shrink-0 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-30" disabled={i === 0} onclick={() => moveWatch(a.id, -1)} aria-label="Move {a.name} up"><Icon name="up" /></button>
+        <button type="button" class="grid size-11 shrink-0 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-30" disabled={i === items.length - 1} onclick={() => moveWatch(a.id, 1)} aria-label="Move {a.name} down"><Icon name="down" /></button>
+        <button type="button" class="grid size-11 shrink-0 place-items-center rounded-full text-danger hover:bg-surface-2" onclick={() => remove(a)} aria-label="Remove {a.name}"><Icon name="close" /></button>
       </li>
     {/each}
   </ul>
