@@ -1,38 +1,10 @@
-import { deflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { DAY, dayKey, type Reading } from '../../shared/backtest';
 import type { Metrics } from '../../shared/signals';
 import { FUNDING_LEVELS, funding7, RULES, type CoinDay } from '../research/compare';
 import { dailyFunding, FUNDING_BASE, FUNDING_START, fundingHistory, months, parseFundingCsv, unzipSingle } from '../research/funding';
+import { zip } from '../helpers/zip';
 import { mockFetch } from '../helpers/mockFetch';
-
-/** A minimal one-file zip archive, deflated, the way Binance's archive builds them. */
-function zip(name: string, text: string): Uint8Array {
-  const raw = Buffer.from(text);
-  const data = deflateRawSync(raw);
-  const n = Buffer.from(name);
-  const local = Buffer.alloc(30);
-  local.writeUInt32LE(0x04034b50, 0);
-  local.writeUInt16LE(8, 8);
-  local.writeUInt32LE(data.length, 18);
-  local.writeUInt32LE(raw.length, 22);
-  local.writeUInt16LE(n.length, 26);
-  const central = Buffer.alloc(46);
-  central.writeUInt32LE(0x02014b50, 0);
-  central.writeUInt16LE(8, 10);
-  central.writeUInt32LE(data.length, 20);
-  central.writeUInt32LE(raw.length, 24);
-  central.writeUInt16LE(n.length, 28);
-  central.writeUInt32LE(0, 42);
-  const cdOffset = 30 + n.length + data.length;
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(1, 8);
-  end.writeUInt16LE(1, 10);
-  end.writeUInt32LE(46 + n.length, 12);
-  end.writeUInt32LE(cdOffset, 16);
-  return new Uint8Array(Buffer.concat([local, n, data, central, n, end]));
-}
 
 const T = Date.UTC(2021, 2, 1);
 const CSV = `calc_time,funding_interval_hours,last_funding_rate\n${T},8,0.0001\n${T + 8 * 3600_000},8,0.0003\n${T + DAY},8,-0.0002\n`;

@@ -17,7 +17,9 @@ import type { Candle } from '../../shared/types';
 import { addGroupHits, compare, toMarkdown } from './compare';
 import { deeper, deeperMarkdown } from './deeper';
 import { fundingHistory } from './funding';
+import { cotHistory } from './cftc';
 import { phase7, phase7Markdown, stablecoinSupply } from './phase7';
+import { phase8, phase8Markdown } from './phase8';
 import { fullHistory } from './history';
 
 it('backtests every rated coin', async () => {
@@ -59,13 +61,16 @@ it('backtests every rated coin', async () => {
   // Total stablecoin supply (Phase 7, Step 3); the report says so if it couldn't be downloaded.
   const supply = await stablecoinSupply(fetch).catch((e) => (console.warn(String(e)), null));
 
+  // CME Bitcoin futures positioning (Phase 8); the report says so if it couldn't be downloaded.
+  const cot = await cotHistory(fetch, now).catch((e) => ({ reports: [], source: String(e) }));
+
   const market = marketHistory(coins);
   const inputs = coins.map((c) => ({ id: c.id, candles: c.candles, readings: readings(c.id, c.candles, market, fearGreed), funding: funding.get(c.id) }));
   const tested = new Set(inputs.filter((c) => c.readings.length).map((c) => c.id));
   const missing = assets.filter((a) => !tested.has(a.id) && !peggedIds.has(a.id)).map((a) => a.name);
 
   const result = addGroupHits(compare(inputs, missing, pegged), inputs);
-  const report = `${toMarkdown(result, now)}\n${deeperMarkdown(deeper(inputs))}\n${phase7Markdown(phase7(inputs, supply))}`;
+  const report = `${toMarkdown(result, now)}\n${deeperMarkdown(deeper(inputs))}\n${phase7Markdown(phase7(inputs, supply))}\n${phase8Markdown(phase8(inputs, cot.reports, cot.source))}`;
   writeFileSync(process.env.BACKTEST_REPORT || 'backtest-report.md', report);
   console.log(report);
   expect(tested.size).toBeGreaterThanOrEqual(30);
@@ -73,4 +78,6 @@ it('backtests every rated coin', async () => {
   expect(funding.size).toBeGreaterThanOrEqual(20);
   // Stablecoin supply goes back to 2017: a short series means the API changed.
   expect(supply?.size ?? 0).toBeGreaterThanOrEqual(2000);
+  // Weekly since December 2017: well over 400 reports.
+  expect(cot.reports.length).toBeGreaterThanOrEqual(400);
 }, 900_000);
