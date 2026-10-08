@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/app';
-import { healthyRoutes } from '../helpers/data';
+import { cgChart, healthyRoutes } from '../helpers/data';
+import { COINGECKO_BASE } from '../../shared/sources/coingecko';
 import { mockFetch } from '../helpers/mockFetch';
 
 class FakeKV {
@@ -123,6 +124,39 @@ describe('worker', () => {
     expect(f.calls.find((u) => u.includes('klines'))).toContain('limit=1000');
     expect((await call('/api/history/tether')).status).toBe(404); // stablecoin
     expect((await call('/api/history/not-a-coin')).status).toBe(404);
+  });
+
+  it('/api/health judges each rating against its own refresh cycle', async () => {
+    await call('/api/snapshot');
+    const now = Date.now();
+    const h = 3_600_000;
+    const item = (id: string, source: string, ageHours: number) => ({ id, source, asOf: now - ageHours * h });
+    kv.store.set(
+      SIGNALS_KEY,
+      JSON.stringify({
+        asOf: now - 5 * 60_000,
+        items: {
+          a: item('a', 'binance', 1),
+          b: item('b', 'binance', 7), // exchange ratings refresh every 2 h: 7 h old is stale
+          c: item('c', 'coingecko', 10), // CoinGecko ratings refresh every 12 h: fine
+          d: item('d', 'coingecko', 17), // stale
+        },
+        skipped: { c: now, e: now }, // c was retried (still has a rating); e has none
+      }),
+    );
+    const body = (await (await call('/api/health')).json()) as { signals: Record<string, number> };
+    expect(body.signals).toEqual({ rated: 4, stale: 2, fromCoinGecko: 2, unrated: 1, lastRunSecondsAgo: 300 });
+  });
+
+  it('requests for unknown coins do not switch a source off', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch(healthyRoutes({ [`${COINGECKO_BASE}/coins/`]: (url: string) => (url.includes('/coins/bitcoin/') ? cgChart(64000) : 404) })),
+    );
+    await call('/api/snapshot');
+    for (const id of ['nope-1', 'nope-2', 'nope-3', 'nope-4']) expect((await call(`/api/candles/${id}?range=7d`)).status).toBe(502);
+    const health = (await (await call('/api/health')).json()) as { breakers: Record<string, string> };
+    expect(health.breakers).toEqual({});
   });
 
   it('/api/fear-greed/history returns the daily history oldest first', async () => {

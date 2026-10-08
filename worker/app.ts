@@ -8,7 +8,7 @@ import type { FetchFn } from '../shared/http';
 import type { SignalsDoc } from '../shared/signals';
 import { emptySnapshot, RANGES, type Range, type Snapshot } from '../shared/types';
 import { TtlCache } from './cache';
-import { refreshSignals, SIGNAL_REFRESH_MS } from './signals';
+import { COINGECKO_REFRESH_MS, refreshSignals, SIGNAL_REFRESH_MS } from './signals';
 
 export interface Env {
   SNAPSHOTS: KVNamespace;
@@ -125,10 +125,15 @@ async function handleHealth(env: Env, now: number) {
   const snap = await readSnapshot(env);
   const signals = await env.SNAPSHOTS.get<SignalsDoc>(SIGNALS_KEY, 'json');
   const rated = signals ? Object.values(signals.items) : [];
+  // Ratings from CoinGecko are refreshed only twice a day by design (to save its monthly quota),
+  // so each rating is judged against its own cycle, with two missed batch cycles of slack.
+  const cycle = (source: string) => (source === 'coingecko' ? COINGECKO_REFRESH_MS : SIGNAL_REFRESH_MS);
   const signalInfo = {
     rated: rated.length,
-    stale: rated.filter((s) => now - s.asOf > 3 * SIGNAL_REFRESH_MS).length,
-    skipped: signals ? Object.keys(signals.skipped).length : 0,
+    stale: rated.filter((s) => now - s.asOf > cycle(s.source) + 2 * SIGNAL_REFRESH_MS).length,
+    fromCoinGecko: rated.filter((s) => s.source === 'coingecko').length,
+    /** Coins tried but with no rating at all (too little history, or no source has them). */
+    unrated: signals ? Object.keys(signals.skipped).filter((id) => !signals.items[id]).length : 0,
     lastRunSecondsAgo: signals?.asOf ? Math.round((now - signals.asOf) / 1000) : null,
   };
   const age = (p: { asOf: number; source: string } | null | undefined) =>
