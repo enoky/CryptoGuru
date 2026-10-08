@@ -146,3 +146,63 @@ From run 37825754453 (commit 8e278b6): same coins and years, plus Binance's fund
 | 2026 (held-out) | 4,485 / 0 / — | 1,585 / 5,279 / +7.46 |
 
 A spread needs both up and down calls in the year; with only one kind it shows —. The picked "against the crowd" rule's held-out average rests on two years, one of them on 6 coin-days of down calls, and its tuning years swung from +37 to −28: not enough to trust, so it isn't shipped.
+
+---
+
+<!-- Copied from .github/workflows/backtest.yml run 37834478061 (commit 17f0d31), the Phase 6 run. Its main tables match the run above to within a few coin-days (data up to the end of September 2026). -->
+
+## Learned weights (Phase 6)
+
+Logistic regression fitted on the tuning years only (up to 2022), on the same four readings, to predict whether a coin rose over the next 30 days (or beat the average coin). The weights are shown as signed shares; a negative weight means that reading pointed the wrong way in the tuning years. The learned rules then score coins exactly like the live ones (±15 bands) and are judged on the held-out years.
+
+| Check | Live weights | Learned (up or down) | Learned (against the market) |
+|---|---|---|---|
+| Trend | 45% | 25% | −20% |
+| Strength vs Bitcoin | 25% | −56% | 43% |
+| RSI (14 days) | 15% | −3% | 11% |
+| Trading volume | 15% | 16% | −25% |
+
+| Rules | Judged on | Spread, tuning (avg of years) | Spread, held-out (avg of years) | Held-out years positive | Held-out pooled [90% range] | Difference from current rules, held-out [90% range] |
+|---|---|---|---|---|---|---|
+| Current rules | up or down | −8.12 | −2.06 | 2 of 4 | −1.66 [−7.36 to +4.59] | — |
+| 90-day momentum | up or down | −2.56 | −1.91 | 1 of 4 | −0.52 [−6.43 to +5.38] | −2.76 to +5.37 |
+| Learned weights (up or down) | up or down | +2.63 | +3.30 | 3 of 4 | +2.33 [−3.05 to +8.73] | −1.93 to +10.72 |
+| Learned weights (against the market) | against the market | +0.14 | −1.28 | 1 of 4 | −1.13 [−3.95 to +1.57] | −3.37 to +0.91 |
+
+A difference range that includes 0 means the result could be chance. The ranges come from resampling whole months 1,000 times, so days that overlap and coins that move together count once, not many times.
+
+## Which checks matter? (ablation, next 30 days)
+
+The current rules with one check left out (its weight set to 0, the others rescaled). If leaving a check out makes the spread better, that check was hurting.
+
+| Rules | Judged on | Spread, tuning (avg of years) | Spread, held-out (avg of years) | Held-out years positive | Held-out pooled [90% range] | Difference from current rules, held-out [90% range] |
+|---|---|---|---|---|---|---|
+| Current rules | up or down | −8.12 | −2.06 | 2 of 4 | −1.66 [−7.36 to +4.59] | — |
+| Current rules without Trend | up or down | −3.83 | +0.09 | 3 of 4 | −0.27 [−4.42 to +3.70] | −4.83 to +6.68 |
+| Current rules without Strength vs Bitcoin | up or down | −8.20 | −2.70 | 1 of 4 | −2.05 [−8.36 to +4.84] | −1.57 to +0.81 |
+| Current rules without RSI (14 days) | up or down | −7.71 | −2.17 | 2 of 4 | −1.76 [−7.39 to +4.45] | −0.30 to +0.11 |
+| Current rules without Trading volume | up or down | −8.52 | −2.94 | 2 of 4 | −2.80 [−8.68 to +3.35] | −1.90 to −0.44 |
+
+## Ratings in detail, tuning years (next 30 days)
+
+| Rating | Coin-days | Higher after 30 days | Average [90% range] | Median | Average when it rose | Average when it fell | Worst |
+|---|---|---|---|---|---|---|---|
+| Strong uptrend | 2,694 | 46.9% | +13.1% [−3.4% to +27.4%] | −3.0% | +56.7% | −25.3% | −70% |
+| Uptrend | 6,889 | 46.8% | +8.5% [−1.2% to +19.7%] | −2.4% | +42.5% | −21.3% | −70% |
+| No clear trend | 7,812 | 48.7% | +7.4% [+0.6% to +15.9%] | −1.0% | +35.0% | −18.7% | −66% |
+| Downtrend | 12,926 | 47.2% | +4.5% [−2.0% to +11.8%] | −1.6% | +30.6% | −18.8% | −68% |
+| Strong downtrend | 1,073 | 49.4% | +4.4% [−4.1% to +16.3%] | −0.2% | +29.1% | −19.7% | −58% |
+| **Any coin-day (yardstick)** | 31,394 | 47.5% | +6.9% [+0.4% to +13.9%] | −1.6% | +36.4% | −19.9% | −70% |
+
+## Ratings in detail, held-out years (next 30 days)
+
+| Rating | Coin-days | Higher after 30 days | Average [90% range] | Median | Average when it rose | Average when it fell | Worst |
+|---|---|---|---|---|---|---|---|
+| Strong uptrend | 3,411 | 45.2% | +4.1% [−1.6% to +10.2%] | −3.4% | +32.2% | −19.1% | −59% |
+| Uptrend | 11,010 | 42.9% | +2.7% [−3.0% to +9.0%] | −3.5% | +28.4% | −16.6% | −62% |
+| No clear trend | 13,993 | 43.1% | +3.3% [−1.3% to +8.9%] | −3.2% | +27.5% | −15.0% | −63% |
+| Downtrend | 23,511 | 48.3% | +4.2% [+0.1% to +9.0%] | −0.6% | +23.1% | −13.6% | −57% |
+| Strong downtrend | 2,928 | 50.9% | +9.0% [+1.9% to +19.0%] | +0.4% | +31.8% | −14.6% | −53% |
+| **Any coin-day (yardstick)** | 54,853 | 45.8% | +3.9% [−0.3% to +8.7%] | −1.9% | +26.2% | −15.0% | −63% |
+
+Compare each rating with the yardstick row: a rating only tells you something if it differs from any coin-day by more than its range.

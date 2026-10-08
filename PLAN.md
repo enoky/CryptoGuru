@@ -317,6 +317,31 @@ The goal: get from "barely better than chance" to a **modest, measurable edge**,
 
 ---
 
+### Phase 6: learned weights and honest uncertainty (backtest only; nothing shipped)
+
+Prompted by an outside review: before more rules, find out what the existing checks are worth. Everything runs inside the GitHub backtest (`tests/research/deeper.ts`); nothing live changes unless a rule passes.
+
+1. **Learned weights:** logistic regression on the same four readings (trend, strength vs Bitcoin, RSI, volume), fitted on the tuning years only (up to 2022), once for "did the coin rise over 30 days" and once for "did it beat the average coin". The learned weights then score coins like the live ones and are judged on 2023 onward.
+2. **Ablation:** the current rules with one check left out at a time.
+3. **Ratings in detail:** for each rating, the share that rose, average, median, average win, average loss and worst case, always next to the same figures for any coin-day.
+4. **Uncertainty ranges:** 90% ranges from resampling whole months 1,000 times (block bootstrap), so overlapping days and coins that move together aren't counted as independent.
+
+**Acceptance:** the Phase 5 rule (held-out spread higher than the current rules and 90-day momentum, positive in most held-out years) **and** the 90% range of the difference from the current rules excludes 0.
+
+**Results** ([`docs/backtest.md`](docs/backtest.md), run 37834478061):
+
+| Next 30 days | Weights (trend / strength / RSI / volume) | Held-out spread (avg of years) | Held-out years positive | Held-out pooled [90% range] | Difference from current [90% range] |
+|---|---|---|---|---|---|
+| Current rules | 45 / 25 / 15 / 15 | −2.1 | 2 of 4 | −1.7 [−7.4, +4.6] | — |
+| 90-day momentum | — | −1.9 | 1 of 4 | −0.5 [−6.4, +5.4] | [−2.8, +5.4] |
+| Learned (up or down) | 25 / −56 / −3 / 16 | +3.3 | 3 of 4 | +2.3 [−3.1, +8.7] | [−1.9, +10.7] |
+| Learned (against the market) | −20 / 43 / 11 / −25 | −1.3 | 1 of 4 | −1.1 [−4.0, +1.6] | [−3.4, +0.9] |
+
+- **Learned (up or down) passes the Phase 5 rule but not the range test:** its gain over the current rules could be chance. Its biggest weight is *against* strength vs Bitcoin (coins that had lagged Bitcoin did better next), which is mean reversion, the opposite of what an "Uptrend" label says. The "against the market" fit learned nearly the opposite weights and failed. Two fits on the same data disagreeing this much means there's no stable pattern to learn. **Not shipped.**
+- **Ablation:** leaving out volume made the current rules worse on held-out years, and its range excludes 0 ([−1.9, −0.4]): volume is the only check with a measurable contribution. Leaving out trend made them better (−2.1 → +0.1), but within chance. RSI and strength vs Bitcoin changed little.
+- **Ratings in detail:** on held-out years every rating's median 30-day return is negative or near 0, and its average is close to any coin-day's (+3.9%). The exception points the wrong way: *Strong downtrend* coins averaged +9.0% [+1.9, +19.0] and rose 50.9% of the time vs 45.8% for any coin. In the tuning years the pattern was reversed (*Strong uptrend* +13.1% vs +6.9%), partly survivorship (today's top coins). Ratings describe the recent trend; they don't forecast the next month.
+- **Decision:** nothing changes in the live app. The labels already describe rather than forecast (Phase 5). Further gains would need new information (on-chain, flows, positioning), not reweighting the same price checks. The extra report sections stay in the monthly backtest so this is re-checked as new held-out months arrive.
+
 ## 6. UI/UX design (mobile first)
 
 **Phones are the main target.** Every screen is designed for a **360–430 px wide portrait phone** first, used one-handed. Larger screens then get extra room. "Done" for any screen means it looks right and works by thumb on a small phone (iPhone SE / small Android) before anyone looks at the desktop layout.
@@ -466,6 +491,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | **3: Polish and trust** | Signal backtest page (how often each signal was followed by a rise or fall); watchlist export/import; optional cookieless analytics; nightly contract job opening issues; news feed only if a source with suitable terms is found | 1.5–2 weeks | The backtest reproduces the documented results; a contract failure opens an issue within 24 h |
 | **4: Signal quality** | Group the trend checks, make RSI depend on the trend, move Fear & Greed to context, graded scores and volatility-scaled thresholds; strength vs BTC, distance from all-time high, market breadth and liquidity; backtest across all coins with walk-forward and calibration checks; futures funding rate if reachable (see §5, *Phase 4*) | 2–3 weeks | On the newer half of the history, the new rules match or beat the current rules and both baselines; High-agreement ratings have a better hit rate than Low (not met: renamed from confidence, see §5); Worker CPU stays under 10 ms per run; every new input is explained in "Why this rating?" |
 | **5: Accuracy** | Backtest back to 2017, reported per year and market phase, tuned on 2017–2022 and tested on 2023 onward; results measured against the market (relative momentum); a choppy-market filter; stricter bullish/bearish bands; futures funding and open interest if reachable (see §5, *Phase 5*) | 1.5–2 weeks | On the held-out years, positive 30-day spread in most years and higher than the current rules and 90-day momentum; steps that don't beat the current rules aren't shipped; Worker CPU under 10 ms per run |
+| **6: Learned weights** | Logistic-regression weights fitted on the tuning years; one-check-out ablation; per-rating median, wins, losses and worst case vs any coin-day; block-bootstrap 90% ranges (see §5, *Phase 6*) | 2–3 days | Phase 5 acceptance, and the range of the difference from the current rules excludes 0 (not met: nothing shipped) |
 | **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
@@ -487,6 +513,7 @@ Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`
 
 - Phase 4: Steps 1–3 built (157 unit tests, 112 browser tests). All-coins backtest: the new rules match the old ones and beat both baselines on the newer half; agreement between the checks predicts being right only weakly at best, so "confidence" is now "agreement"; pegged assets are found by how little their price moves. See §5 *Phase 4*. Futures funding moved to Phase 5.
 - Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 (futures funding) tested in the backtest and not shipped: the promising result rested on a few episodes. See §5 *Phase 5*.
+- Phase 6 (learned weights, backtest only): learned weights beat the current rules on held-out years but within chance, and leaned on mean reversion; not shipped. Volume is the only check with a measurable contribution; no rating's next-month returns differ reliably from any coin's in the right direction. See §5 *Phase 6*.
 
 ---
 
