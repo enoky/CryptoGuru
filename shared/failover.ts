@@ -80,7 +80,9 @@ export async function firstSuccessful<T, S extends string>(
       return { value, source: a.name };
     } catch (err) {
       // Only real outages (timeouts, rate limits, server errors, bad data) count against a source.
-      if (!isNotAvailable(err)) breaker.failure(a.name);
+      // A "not listed here" answer shows the source is up, so it clears earlier failures.
+      if (isNotAvailable(err)) breaker.success(a.name);
+      else breaker.failure(a.name);
       errors.push({ name: a.name, message: err instanceof Error ? err.message : String(err) });
     }
   }

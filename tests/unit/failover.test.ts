@@ -85,3 +85,18 @@ describe('not-available answers', () => {
     expect(b.isOpen('a')).toBe(true);
   });
 });
+
+describe('not-available answers prove the source is up', () => {
+  it('clear earlier failures, so they do not add up with later ones', async () => {
+    const { NotAvailable } = await import('../../shared/failover');
+    const { HttpError } = await import('../../shared/http');
+    const b = new CircuitBreaker(3);
+    const attempt = (err: Error) =>
+      firstSuccessful([{ name: 'a', run: () => Promise.reject(err) }, { name: 'b', run: async () => 1 }], b);
+    await attempt(new HttpError(503, 'https://x/'));
+    await attempt(new HttpError(503, 'https://x/'));
+    await attempt(new NotAvailable('not listed')); // the source answered
+    await attempt(new HttpError(503, 'https://x/'));
+    expect(b.isOpen('a')).toBe(false);
+  });
+});
