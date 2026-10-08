@@ -21,5 +21,8 @@
     "tests/unit/signalJob.test.ts",
     "tests/unit/worker.test.ts",
     "worker/**/*.ts"
+  ],
+  "exclude": [
+    "tests/helpers/zip.ts"
   ]
 }
