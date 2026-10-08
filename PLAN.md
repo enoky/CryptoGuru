@@ -248,7 +248,7 @@ The goal is a rating that is **honest and calibrated**, not one that "predicts" 
 
 **Constraints:** new inputs must fit the free plan's 50 requests and 10 ms of CPU per Worker run (live runs already use more and rely on Cloudflare's leeway: §4). Fewer, tested checks beat many tuned ones, and every threshold is documented in `shared/signals.ts`.
 
-### Phase 5: accuracy (Step 1 built; Steps 2–4 tested and not shipped)
+### Phase 5: accuracy (Step 1 built; Steps 2–5 tested and not shipped)
 
 The goal: get from "barely better than chance" to a **modest, measurable edge**, honestly measured. A reliable price forecast from free public data isn't on offer, so success means a few percentage points that hold up on years the rules were never tuned on. Every rating stays explainable and every threshold stays in `shared/signals.ts`.
 
@@ -274,9 +274,23 @@ The goal: get from "barely better than chance" to a **modest, measurable edge**,
 **Step 4: fewer, stronger calls**
 - Test raising the *Leaning* bands (±15 today) to ±25 or ±30 so only clear cases get a bullish or bearish label. More coins will read *Mixed*; that's the honest answer for them.
 
-**Step 5: futures positioning (was Phase 4, Step 4): not in the Worker**
-- Funding rate and open interest show when leveraged traders are crowded on one side, which often comes before sharp reversals: the only candidate that adds information beyond the price chart.
-- **Decided after the CPU check (§4):** live runs already go well past the nominal 10 ms (P90 26 ms) without being stopped, so a large funding-rate parse on every snapshot run is not worth the risk on the free plan. If it's tried, it belongs in the GitHub backtest first (Binance `fundingRate` history back to 2019 ⚠ verify), and only if it beats the current rules on held-out years would it be worth finding CPU for (for example a separate cron run once an hour, or a paid plan).
+**Step 5: futures positioning (was Phase 4, Step 4): tested in the backtest, not shipped**
+- Funding rate shows when leveraged traders are crowded on one side. The live futures API refuses US addresses (GitHub's runners included), so the backtest reads Binance's public archive instead (`tests/research/funding.ts`: one zipped CSV per symbol per month from `data.binance.vision`, back to September 2019). Funding data covered 74% of tuning and 91% of held-out coin-days.
+- Two rule families, fixed before seeing results, settings picked on the tuning years: **funding against the crowd** (7-day average funding above a threshold reads as down, below zero as up) and **the current rules made neutral when funding shows the crowd leaning the same way**.
+- **Result** (next 30 days, spread averaged year by year): the filter didn't help (picked: −8.2 tuning, −1.2 held-out, vs −8.1 / −1.9 for the current rules). Funding against the crowd (picked: above 0.05% / below 0) looked strong at first: +4.4 tuning, +16.9 held-out. Year by year it doesn't hold up:
+
+  | Year | Up calls (negative funding) | Down calls (crowded longs) | Spread |
+  |---|---|---|---|
+  | 2020 | 617 | 671 | +37.2 |
+  | 2021 | 655 | 1,704 | −28.4 |
+  | 2022 | 3,610 | 0 | — |
+  | 2023 (held-out) | 2,226 | 6 | +15.1 |
+  | 2024 (held-out) | 1,366 | 400 | +18.8 |
+  | 2025 (held-out) | 4,398 | 0 | — |
+  | 2026 (held-out) | 4,485 | 0 | — |
+
+  The held-out average rests on two years, one of them on 6 coin-days of down calls; the tuning years swung from +37 to −28; and against the market it was flat (−0.2 held-out), so it times a few market-wide episodes rather than telling coins apart. **It fails the acceptance rule (positive in most held-out years) and isn't shipped.** No change to the Worker, which had no CPU headroom for it anyway (§4).
+- If revisited: measure the one-sided reading (crowded shorts only) against the average coin each year, over more years of data; a market-wide "crowd positioning" note could be shown as context without any claim about what comes next.
 
 **Not planned:** more indicators built from the same prices (Bollinger bands, stochastics: they repeat the checks we have); tuning until the backtest looks good; machine learning (overfits, and ratings could no longer be explained).
 
@@ -299,7 +313,7 @@ The goal: get from "barely better than chance" to a **modest, measurable edge**,
 - **Against the market:** any coin beat the equal-weighted average only 37.8% of the time (a few big winners pull it up). Down-pointing checks "lagged" 62% of the time, which is that base rate, not skill. Up-pointing checks beat it about 2 points more often than any coin, RSI dips in an uptrend about 11 points more (49.3%): worth watching, not proof.
 - **Agreement:** unrelated to being right (held-out: High 44.8%, Low 48.3%).
 - **Decision:** the labels now describe instead of forecast. *Strong bullish signals / Leaning bullish / Mixed / Leaning bearish / Strong bearish signals* became **Strong uptrend / Uptrend / No clear trend / Downtrend / Strong downtrend**; explanations no longer claim what "has often" happened next; the About page says the ratings summarise the recent past and that backtests since 2019 found them no reliable guide to the next month. The signals document moved to format version 3, so ratings are rebuilt over about 2 hours after deploying.
-- **Step 5 (futures positioning):** after the CPU check, not added to the Worker; it can be tried in the backtest first (see Step 5 above).
+- **Step 5 (futures positioning):** tested in the backtest with Binance's funding archive; the one rule that looked good rests on a few episodes and fails the acceptance rule, so it isn't shipped (see Step 5 above).
 
 ---
 
@@ -472,7 +486,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`; the nightly contract check has passed against all live APIs.
 
 - Phase 4: Steps 1–3 built (157 unit tests, 112 browser tests). All-coins backtest: the new rules match the old ones and beat both baselines on the newer half; agreement between the checks predicts being right only weakly at best, so "confidence" is now "agreement"; pegged assets are found by how little their price moves. See §5 *Phase 4*. Futures funding moved to Phase 5.
-- Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 (futures) stays out of the Worker after the CPU check. See §5 *Phase 5*.
+- Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 (futures funding) tested in the backtest and not shipped: the promising result rested on a few episodes. See §5 *Phase 5*.
 
 ---
 

@@ -114,3 +114,35 @@ The yardstick: any coin beat the market average 37.8% of the time and lagged it 
 - Past liquidity isn’t available. Market breadth is measured over these coins.
 - No trading costs, taxes or slippage. Not financial advice.
 - Left out (no Binance history, or too little of it): Figure Heloc, Hyperliquid, Monero, WhiteBIT Coin, LEO Token, Rain, Canton, Gram (prev. Toncoin), Bitway, Cronos, OKB, MemeCore, Mantle, Spiko Amundi Overnight Swap Fund (EUR), United Stables, HTX DAO, Bitget Token, USDGO, Gate, Venice Token, KuCoin, Kaspa, Blockchain Capital, Pi Network, Lighter, Invesco Short Duration US Government Securities Fund, Aerodrome Finance, Open USD, Stable, Akedo, Spiko EU T-Bills Money Market Fund, XDC Network.
+
+## Futures funding (Phase 5, Step 5), next 30 days
+
+From run 37825754453 (commit 8e278b6): same coins and years, plus Binance's funding-rate archive. Funding is the 7-day average rate perpetual-futures longs paid shorts (per 8 hours). Coin-days with funding data: 73.9% of tuning, 91.0% of held-out; the filter rules fall back to the current rules elsewhere.
+
+| Rules | Spread, tuning | Spread, held-out | Held-out years positive | Spread vs market, held-out | Calls, held-out |
+|---|---|---|---|---|---|
+| Current rules | −8.12 | −1.87 | 2 of 4 | +0.48 | 74.6% of days |
+| Funding against the crowd, above 0.02% / below 0.00% | +1.47 | +9.99 | 2 of 2 | −1.69 | 29.8% of days |
+| Funding against the crowd, above 0.03% / below 0.00% | +3.44 | +15.59 | 2 of 2 | −1.26 | 27.7% of days |
+| Funding against the crowd, above 0.05% / below 0.00% **(picked)** | +4.37 | +16.92 | 2 of 2 | −0.15 | 25.9% of days |
+| Funding against the crowd, above 0.03% / below −0.01% | −0.37 | +14.70 | 2 of 2 | −2.20 | 9.6% of days |
+| Current, neutral when funding is crowded the same way (above 0.02% / below 0.00%) | −8.71 | −0.23 | 3 of 4 | +0.79 | 58.3% of days |
+| Current, neutral when funding is crowded the same way (above 0.03% / below 0.00%) | −8.63 | −0.63 | 2 of 4 | +0.74 | 59.7% of days |
+| Current, neutral when funding is crowded the same way (above 0.05% / below 0.00%) **(picked)** | −8.21 | −1.15 | 2 of 4 | +0.73 | 60.9% of days |
+| Current, neutral when funding is crowded the same way (above 0.03% / below −0.01%) | −9.14 | −1.05 | 2 of 4 | +0.45 | 69.8% of days |
+
+### Funding, year by year (next 30 days)
+
+| Year | Funding against the crowd (picked): up calls / down calls / spread | Funding filter (picked): up calls / down calls / spread |
+|---|---|---|
+| 2018 | — | — |
+| 2019 | — | 912 / 1,814 / +0.56 |
+| 2020 | 617 / 671 / +37.18 | 2,372 / 1,495 / −16.85 |
+| 2021 | 655 / 1,704 / −28.43 | 3,630 / 1,755 / −12.18 |
+| 2022 | 3,610 / 0 / — | 844 / 6,030 / −4.37 |
+| 2023 (held-out) | 2,226 / 6 / +15.09 | 3,007 / 4,668 / +2.64 |
+| 2024 (held-out) | 1,366 / 400 / +18.75 | 5,527 / 4,222 / −3.36 |
+| 2025 (held-out) | 4,398 / 0 / — | 3,950 / 5,018 / −11.35 |
+| 2026 (held-out) | 4,485 / 0 / — | 1,585 / 5,279 / +7.46 |
+
+A spread needs both up and down calls in the year; with only one kind it shows —. The picked "against the crowd" rule's held-out average rests on two years, one of them on 6 coin-days of down calls, and its tuning years swung from +37 to −28: not enough to trust, so it isn't shipped.
