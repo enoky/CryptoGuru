@@ -62,9 +62,10 @@ jobs:
           URL: ${{ steps.deploy.outputs.url }}
         run: |
           # The page must load. A brand-new workers.dev subdomain can take a few minutes
-          # to appear in DNS, so retry any error (including "host not found") for up to 5 minutes.
+          # to appear in DNS, so retry any error (including "host not found") for up to 5 minutes;
+          # each attempt is capped at 20 s so a hanging connection can't stretch that.
           # The first /api/snapshot call fills the market data; its result is reported, not required.
-          curl -sf -o /dev/null --retry 30 --retry-delay 10 --retry-max-time 300 --retry-all-errors "$URL/" \
+          curl -sf -o /dev/null --connect-timeout 10 --max-time 20 --retry 30 --retry-delay 10 --retry-max-time 300 --retry-all-errors "$URL/" \
             || { echo "::error::$URL still did not load after 5 minutes"; exit 1; }
           snapshot=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$URL/api/snapshot")
           health=$(curl -s --max-time 30 "$URL/api/health")
