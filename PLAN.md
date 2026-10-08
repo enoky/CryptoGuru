@@ -386,6 +386,19 @@ If one passes, the Worker would add one market-wide request per refresh. It's we
 - **Step 3 fails:** stablecoin supply as market timing swung from +6.2 on the tuning years to −11.5 on the held-out years at the picked level. The ±1% level looks good held-out (+8.9), but picking it now would be choosing with hindsight, and it rests on 3 years with ranges ±10 points wide. As a fifth check it made the current rules slightly worse. Supply growth mostly tracks the market cycle it's meant to predict. DefiLlama isn't added to the Worker.
 - **Decision:** nothing in the live ratings changes. The labels already describe rather than forecast (Phase 5), and the app now shows how much uncertainty its own history carries.
 
+### Where the accuracy work stops
+
+Phases 5–7 tested every reasonable idea within reach of free public data: different rules, learned weights, a choppy-market filter, stricter bands, ranking against other coins, futures funding, volume read four ways, and stablecoin liquidity. None beat the current rules beyond chance on the held-out years. A reliable 30-day forecast isn't in this data, so the search for one stops here. The ratings describe the recent trend, and the app shows how much (or how little) its own history supports them.
+
+**Standing acceptance rule for any future change to the ratings:**
+
+1. On the held-out years, a higher 30-day spread than the current rules and 90-day momentum, positive in most years.
+2. A 90% range (month-block bootstrap) for the difference from the current rules that excludes 0.
+3. A gain of at least 1 point of spread on the held-out years. A new input must earn its added complexity, requests and explanation; a smaller gain is rejected even if it passes 1–2.
+4. Settings fixed before the run and picked on the tuning years only.
+
+Reopen only with genuinely new information that has enough free history to backtest. The monthly backtest keeps re-checking the current rules and the Phase 6–7 analyses as new months arrive.
+
 ## 6. UI/UX design (mobile first)
 
 **Phones are the main target.** Every screen is designed for a **360–430 px wide portrait phone** first, used one-handed. Larger screens then get extra room. "Done" for any screen means it looks right and works by thumb on a small phone (iPhone SE / small Android) before anyone looks at the desktop layout.
