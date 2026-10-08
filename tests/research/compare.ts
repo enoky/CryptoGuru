@@ -449,6 +449,20 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
   }
   L.push('');
 
+  {
+    const keys = [c.picked.funding, c.picked.fundingFilter].filter(Boolean);
+    L.push('### Funding, year by year (next 30 days)', '');
+    L.push(`| Year | ${keys.map((k) => `${nameOf(k)}: up calls / down calls / spread`).join(' | ')} |`, `|---|${keys.map(() => '---').join('|')}|`);
+    for (const y of c.years) {
+      const cells = keys.map((k) => {
+        const s = c.stats[k]?.[30][y];
+        return s ? `${s.bull.n.toLocaleString('en-US')} / ${s.bear.n.toLocaleString('en-US')} / ${pts(spread(s))}` : '—';
+      });
+      L.push(`| ${y}${isTuning(y) ? '' : ' (held-out)'} | ${cells.join(' | ')} |`);
+    }
+    L.push('', 'A spread needs both up and down calls in the year; with only one kind it shows —.', '');
+  }
+
   L.push('## Were ratings right more often when the checks agreed? (current rules, next 30 days)', '');
   L.push('| Agreement | Tuning years | Held-out years |', '|---|---|---|');
   for (const a of AGREEMENTS) {
