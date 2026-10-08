@@ -17,6 +17,7 @@ import type { Candle } from '../../shared/types';
 import { addGroupHits, compare, toMarkdown } from './compare';
 import { deeper, deeperMarkdown } from './deeper';
 import { fundingHistory } from './funding';
+import { phase7, phase7Markdown, stablecoinSupply } from './phase7';
 import { fullHistory } from './history';
 
 it('backtests every rated coin', async () => {
@@ -55,16 +56,21 @@ it('backtests every rated coin', async () => {
   };
   await Promise.all(Array.from({ length: 6 }, fundingLane));
 
+  // Total stablecoin supply (Phase 7, Step 3); the report says so if it couldn't be downloaded.
+  const supply = await stablecoinSupply(fetch).catch((e) => (console.warn(String(e)), null));
+
   const market = marketHistory(coins);
   const inputs = coins.map((c) => ({ id: c.id, candles: c.candles, readings: readings(c.id, c.candles, market, fearGreed), funding: funding.get(c.id) }));
   const tested = new Set(inputs.filter((c) => c.readings.length).map((c) => c.id));
   const missing = assets.filter((a) => !tested.has(a.id) && !peggedIds.has(a.id)).map((a) => a.name);
 
   const result = addGroupHits(compare(inputs, missing, pegged), inputs);
-  const report = `${toMarkdown(result, now)}\n${deeperMarkdown(deeper(inputs))}`;
+  const report = `${toMarkdown(result, now)}\n${deeperMarkdown(deeper(inputs))}\n${phase7Markdown(phase7(inputs, supply))}`;
   writeFileSync(process.env.BACKTEST_REPORT || 'backtest-report.md', report);
   console.log(report);
   expect(tested.size).toBeGreaterThanOrEqual(30);
   // Guard against the archive silently failing: most large coins have perpetual contracts.
   expect(funding.size).toBeGreaterThanOrEqual(20);
+  // Stablecoin supply goes back to 2017: a short series means the API changed.
+  expect(supply?.size ?? 0).toBeGreaterThanOrEqual(2000);
 }, 900_000);
