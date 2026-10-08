@@ -178,8 +178,8 @@ describe('tally', () => {
           "63.9",
         ],
         "highAgreementRight": [
-          1371,
-          "60.5",
+          1,
+          "100.0",
         ],
         "rsiBullish": [
           9,

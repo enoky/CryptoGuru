@@ -185,7 +185,12 @@ describe('combine', () => {
     expect(combine(groups({ trend: 0.5, strength: 1, rsi: -1 }), base)).toMatchObject({ score: 33, tone: 'bullish', agreement: 'Medium' });
   });
 
-  it('rates agreement Low when fewer than half the clear readings point the overall way', () => {
+  it('counts neutral checks as not agreeing: 2 of 4 pointing up is Medium', () => {
+    expect(combine(groups({ trend: 1, strength: 1, rsi: 0, volume: 0 }), base)).toMatchObject({ tone: 'bullish', agreement: 'Medium' });
+    expect(combine(groups({ trend: 1, strength: 1, rsi: 0, volume: 1 }), base)).toMatchObject({ tone: 'bullish', agreement: 'High' });
+  });
+
+  it('rates agreement Low when fewer than half the checks point the overall way', () => {
     // Trend alone carries the score (45 × 0.6 − 25 × 0.3 − 15 = 4.5 → mixed); for a mixed score, agreement is the share of neutral groups.
     expect(combine(groups({ trend: 0.6, strength: -0.3, rsi: -1, volume: 0 }), base)).toMatchObject({ label: 'Mixed / neutral', agreement: 'Low' });
   });

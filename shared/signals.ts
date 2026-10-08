@@ -304,7 +304,7 @@ export interface Combined {
 
 /**
  * Weighted score over the groups that had enough data (the trend group is
- * required). Agreement is the share of clear group readings that point the
+ * required). Agreement is the share of groups with data that point the
  * overall way (for a neutral score: the share that are themselves neutral):
  * 75% or more High, 50% or more Medium. Cautions are listed alongside: high
  * volatility, fewer than 3 groups, thin trading, and market context leaning
@@ -319,9 +319,8 @@ export function combine(signals: Record<GroupKey, number | null>, m: Metrics): C
   const { label, tone } = labelFor(score);
 
   const dir: Sig = tone === 'bullish' ? 1 : tone === 'bearish' ? -1 : 0;
-  const dirs = available.map((g) => dirOf(signals[g.key]));
-  const pool = dir === 0 ? dirs : dirs.filter((d) => d !== 0);
-  const share = pool.length ? pool.filter((d) => d === dir).length / pool.length : 0;
+  // Neutral checks count as not agreeing with a bullish or bearish rating: 2 of 4 pointing up is Medium, not High.
+  const share = available.filter((g) => dirOf(signals[g.key]) === dir).length / available.length;
   const agreement: Agreement = share >= 0.75 ? 'High' : share >= 0.5 ? 'Medium' : 'Low';
 
   const cautions: Caution[] = [];
