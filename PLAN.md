@@ -200,6 +200,46 @@ The dashboard also offers a **"Signals" view**: a sortable table of all assets b
 ### Known limitations (shown on the About page)
 Technical indicators lag the price and fail in sideways markets. They ignore fundamentals, news, token unlocks and regulation, and backtested thresholds don't guarantee future results. Low-liquidity coins produce noisy signals. Phase 3 adds a simple historical backtest page so users can see how often each signal was "right".
 
+### Planned improvements (Phase 4: signal quality)
+
+The goal is a rating that is **honest and calibrated**, not one that "predicts" prices. Most of the gain comes from fixing how the current checks are combined and measuring the result, more than from adding inputs. Each step must keep every input and threshold visible in "Why this rating?" and keep the "signals, not advice" wording.
+
+**Step 1: fix the structure (no new data)**
+- **Group the trend checks.** Today the 200-day trend, the 50/200 cross and MACD all measure trend or momentum, and together they are 60% of the weight. Because they usually agree, they inflate the confidence label. Combine them into one *Trend* group, and count confidence as agreement between groups (Trend, Momentum extremes, Volume, Market context) instead of between single checks.
+- **Make the contrarian checks depend on the trend.** RSI < 30 and extreme fear both count as bullish even in a steep downtrend, where oversold coins often stay oversold. New rule: in an uptrend (close > SMA200), RSI < 30 reads as "dip in an uptrend" (bullish); in a downtrend it is neutral, and the explanation says the drop is fast. Overbought gets the mirror-image rule.
+- **Move Fear & Greed out of the per-coin score.** It is one number for the whole market, so it shifts every coin by the same amount and can't tell coins apart. Show it as market context, and let extreme readings lower confidence instead of voting.
+- **Graded instead of −1/0/+1.** Scale each check from −1 to +1 with caps (e.g. distance from SMA200 counts in full at ±10%), so a price 2.1% above the average no longer counts the same as one 80% above.
+- **Scale thresholds by volatility.** The "neutral band" for trend and cross widens with the coin's volatility. ±2% means a lot for BTC but very little for a small-cap coin.
+
+**Step 2: add metrics from data already fetched (no new requests)**
+
+| Metric | Formula | Use | Data |
+|---|---|---|---|
+| Strength vs BTC | coin 90-day return − BTC 90-day return | Scored (new *Relative strength* group) | Daily candles already fetched; BTC's return is stored in KV when BTC is rated |
+| Distance from all-time high | `athChangePct` | Context, and part of the explanation (deep drawdowns recover slowly; near the high there is less overhead) | Already in the CoinGecko snapshot |
+| Market breadth | share of rated coins with close > SMA200 | Market context replacing Fear & Greed's vote; very low or very high breadth lowers confidence | Computed from the existing signals document |
+| Liquidity | 24h volume ÷ market cap | Below ~1%, confidence drops one level and a "thinly traded" note is shown | Already in the snapshot |
+
+**Step 3: measure across all coins**
+- Extend the backtest to every rated coin (not just the top 20), with each check's hit rate at 7 and 30 days.
+- Compare against two baselines: "always bullish" and plain 90-day momentum. A check that doesn't beat both is dropped or kept as context only.
+- **Walk-forward test:** tune on the older half of the history and report results on the newer half only, so thresholds aren't fitted to past prices.
+- **Calibration check:** "High confidence" ratings must have a better hit rate than "Low" ones; if not, the confidence rules change.
+- Runs as a script in CI, not in the browser, and writes a results table that the backtest page and this plan both link to.
+
+**Step 4: futures data (only if reachable) ⚠ verify before build**
+- **Funding rate and open interest** from a public futures API (Binance `fapi/v1/premiumIndex` returns every symbol in one request; Bybit and OKX have equivalents). Very high positive funding means a crowded leveraged long; it lowers the score or confidence. Strongly negative funding reads as crowded shorts.
+- Binance futures blocks US IP addresses, and Cloudflare Workers may run from US locations; the current Binance source (`data-api.binance.vision`) is spot only. Check from the Worker first, and fall back to Bybit or OKX. Budget: 1 request per snapshot run.
+
+**Considered and not planned**
+- **Stablecoin supply growth and DeFi TVL** (DefiLlama free API): reasonable market-wide context, but it adds a source for a small gain. Revisit after Step 3.
+- **On-chain data** (exchange flows, MVRV, active addresses): good sources are paid, cover only BTC and ETH, or have unclear terms.
+- **Token unlock schedules:** no free source with clear terms.
+- **Social sentiment:** needs scraping, which breaks the "public API with clear terms" rule.
+- **Machine learning:** not transparent, and overfits easily on a few years of daily data.
+
+**Constraints:** new inputs must fit the free plan's 50 requests and 10 ms of CPU per Worker run (check the dashboard's CPU numbers before adding work to the signal cron). Fewer, tested checks beat many tuned ones, and every new threshold is documented in `shared/signals.ts` like the existing ones.
+
 ---
 
 ## 6. UI/UX design (mobile first)
@@ -348,11 +388,12 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | **1: MVP** | Worker cron and snapshot, prices and candles endpoints with failover; dashboard (market bar, top-50 table, sparklines); asset page with 7D/30D/1Y chart; local watchlist; freshness stamps; disclaimer and About page; dark/light themes | 2–3 weeks | Every screen works one-handed on a 360 px phone with no horizontal scrolling; then also on desktop; Lighthouse mobile ≥ 90; with the primary source blocked in tests, data still loads from the fallback; with every source blocked, the last good data shows with a stale banner; no console errors |
 | **2: v1 Signals** | Indicator module with tests; SignalBadge, SignalCard and WhySheet, Signals screener; Fear & Greed and trending widgets; offline app shell and Add to Home Screen (PWA); accessibility pass with axe; currency selector | 1.5–2 weeks | Indicator tests match the reference fixtures to within 0.01; every rating explains every indicator in plain English; no serious axe violations |
 | **3: Polish and trust** | Signal backtest page (how often each signal was followed by a rise or fall); watchlist export/import; optional cookieless analytics; nightly contract job opening issues; news feed only if a source with suitable terms is found | 1.5–2 weeks | The backtest reproduces the documented results; a contract failure opens an issue within 24 h |
+| **4: Signal quality** | Group the trend checks, make RSI depend on the trend, move Fear & Greed to context, graded scores and volatility-scaled thresholds; strength vs BTC, distance from all-time high, market breadth and liquidity; backtest across all coins with walk-forward and calibration checks; futures funding rate if reachable (see §5, *Planned improvements*) | 2–3 weeks | On the newer half of the history, the new rules match or beat the current rules and both baselines; High-confidence ratings have a better hit rate than Low; Worker CPU stays under 10 ms per run; every new input is explained in "Why this rating?" |
 | **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
 
-**Status:** Phases 0–3 are built, including the Phase 1 leftovers, and tested against mocked APIs (116 unit tests, 92 browser tests at 360/375/412 px phones and desktop).
+**Status:** Phases 0–3 are built, including the Phase 1 leftovers, and tested against mocked APIs (123 unit tests, 108 browser tests at 360/375/412 px phones and desktop).
 - Phase 2: signals; offline app shell and install; currency selector; accessibility checks on every screen and sheet.
 - Phase 3:
   - **Backtest** (`#/signals/backtest`): the live rules replayed on ~1,000 daily candles for the 20 largest non-stable coins, at 7- and 30-day horizons, each result shown next to the "any day" baseline, with caveats (overlapping windows, correlated coins, survivorship, no costs). Engine in `shared/backtest.ts`, tested for no look-ahead, identical rules to live, and a fixed reference result; runs in a Web Worker and is cached for the day. History comes from `/api/history/:id` (Binance, then Kraken; CoinGecko's free plan only has a year) and `/api/fear-greed/history`.
@@ -365,7 +406,9 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
   - **Lighthouse CI** (`lighthouserc.cjs`, `ci.yml` job `lighthouse`): mobile profile against the built app with mock data (`MOCK_API=1`), 3 runs × 3 screens, judged on the median run. Every budget in §7 is enforced. Current results: Performance 99–100, Accessibility 100, Best Practices 100, SEO 100; LCP 1.2–1.85 s; CLS 0; TBT under 100 ms; initial JS 55 KB. Getting there fixed real issues: a missing `robots.txt`; layout shift on Markets, Signals and coin pages (now fixed-size placeholders); the coin page waiting on the whole snapshot (sections now load independently, the chart library and 1-year history load when idle, and the coin page shows the server's rating when it is recent, so it always matches the Signals list); big data kept deeply reactive (now stored raw); sparklines sent with 16 digits (now 5).
   - **Gestures:** pull-to-refresh on Markets, Watchlist and Signals; swipe a watchlist row left to reveal Remove, or further to remove it, with Undo (also for Edit-mode removals). Tested with real touch input on the phone projects.
 
-Not yet done: verifying against the live APIs and deploying.
+Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`; the nightly contract check has passed against all live APIs.
+
+Next: Phase 4 (signal quality), not yet started.
 
 ---
 
@@ -379,7 +422,7 @@ Not yet done: verifying against the live APIs and deploying.
 | Users treat signals as advice | Legal and reputational risk; user losses | Neutral wording, no buy/sell language, disclaimer on every rating, published limitations and backtest |
 | Wrong or manipulated data from one source | Misleading prices or signals | Schema validation, sanity bounds, cross-source check for large moves |
 | Symbol collisions (same ticker for different coins) | Wrong candles for a coin | Map by CoinGecko ID → explicit Binance pair table; never match by ticker alone |
-| Indicator thresholds are arbitrary | Signals feel unreliable | Use the standard textbook values, document them, and let the Phase 3 backtest inform tuning |
+| Indicator thresholds are arbitrary | Signals feel unreliable | Use the standard textbook values, document them, and let the Phase 3 backtest inform tuning; Phase 4 tunes only on older data and reports results on newer data |
 | Can attribution and redistribution terms allow caching data for all users? ⚠ | Possible terms violation | Read each provider's terms before building; keep cache times short; switch provider if needed |
 | **Open:** should the default list cover top 50 or top 100? | Upstream cost and UI density | Fetch 100 (same single call) and display 50 by default with "show more" |
 | **Resolved:** fiat currencies other than USD | — | Rates derived from CoinGecko `/global` market caps in each currency: no extra API and no extra calls |
