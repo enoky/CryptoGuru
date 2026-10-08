@@ -399,7 +399,7 @@ Phases 5–7 tested every reasonable idea within reach of free public data: diff
 
 Reopen only with genuinely new information that has enough free history to backtest. The monthly backtest keeps re-checking the current rules and the Phase 6–7 analyses as new months arrive.
 
-### Phase 8: CME futures positioning (CFTC), backtest only
+### Phase 8: CME futures positioning (CFTC), backtest only (tested, not shipped)
 
 This is the one source that qualifies under the reopening clause above. It's genuinely new information: who holds positions, not what price did. It's free, official and in the public domain, and it has enough history to tune and test. Nothing live changes unless a rule passes the standing acceptance rule, including the 1-point minimum gain.
 
@@ -435,6 +435,27 @@ Expect failure. The report will say so plainly either way.
 - "Why this rating?" explains the new input in plain words.
 
 **Acceptance:** the standing acceptance rule (§5, *Where the accuracy work stops*), including the 1-point minimum gain. The result is recorded here either way.
+
+**Results** ([`docs/backtest.md`](docs/backtest.md), run 37845468180). 443 weekly reports from April 2018 came through the CFTC public reporting API. The yearly archives didn't download, so the fallback was used. Next 30 days:
+
+| Rules | Tuning spread | Held-out spread (avg of years) | Held-out years positive | Difference from current, held-out [90% range] |
+|---|---|---|---|---|
+| Current rules | −8.1 | −1.9 | 2 of 4 | — |
+| 90-day momentum | −2.6 | −1.8 | 1 of 4 | [−2.8, +5.3] |
+| Follow asset managers, ±0 points | −1.5 | −4.1 | 1 of 4 | [−11.0, +5.8] |
+| Follow asset managers, ±2 points | +1.0 | −3.3 | 2 of 4 | [−14.2, +7.7] |
+| Follow asset managers, ±5 points (picked) | +9.4 | +2.0 | 2 of 3 | [−5.6, +22.6] |
+| Against leveraged funds at extremes | +18.7 | −4.6 | 0 of 2 | [−8.0, +12.1] |
+| Current rules + asset-manager change as a fifth check | −8.7 | −2.2 | 2 of 4 | [−2.1, +2.1] |
+
+- **Follow asset managers (picked ±5) comes closest of anything tested since Phase 5, but fails.**
+  - It meets every other part of the rule: 3.9 points above the current rules, above momentum, and positive in 2 of the 3 years that had both kinds of call.
+  - It fails because the range of its difference from the current rules (−5.6 to +22.6) includes 0.
+  - Moves of 5 points in 4 weeks are rare, so the result rests on a handful of episodes, with no calls at all in one held-out year.
+  - It's worth re-reading as the monthly backtest adds held-out months. It isn't shipped.
+- **Against leveraged funds failed as the plan expected:** the best tuning result of any candidate (+18.7) turned into −4.6 on the held-out years, with no positive year. Since the ETFs launched, the hedge-fund short is mostly the basis trade, so reading it as crowd positioning stopped working.
+- **As a fifth check** the asset-manager reading made no difference (range −2.1 to +2.1).
+- **Decision:** nothing ships, and the CFTC isn't added to the Worker. The standing acceptance rule held.
 
 ## 6. UI/UX design (mobile first)
 
@@ -587,7 +608,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | **5: Accuracy** | Backtest back to 2017, reported per year and market phase, tuned on 2017–2022 and tested on 2023 onward; results measured against the market (relative momentum); a choppy-market filter; stricter bullish/bearish bands; futures funding and open interest if reachable (see §5, *Phase 5*) | 1.5–2 weeks | On the held-out years, positive 30-day spread in most years and higher than the current rules and 90-day momentum; steps that don't beat the current rules aren't shipped; Worker CPU under 10 ms per run |
 | **6: Learned weights** | Logistic-regression weights fitted on the tuning years; one-check-out ablation; per-rating median, wins, losses and worst case vs any coin-day; block-bootstrap 90% ranges (see §5, *Phase 6*) | 2–3 days | Phase 5 acceptance, and the range of the difference from the current rules excludes 0 (not met: nothing shipped) |
 | **7: Detail, volume, stablecoins** | Per-rating median, wins, losses, worst case and ranges on the in-app Backtest page; one volume test with variants fixed in advance; stablecoin supply (DefiLlama) as market timing and as a fifth check (see §5, *Phase 7*) | 3–4 days | Backtest page shows the detail at phone width; Steps 2–3 pass the Phase 6 acceptance or aren't shipped (Step 1 built; Steps 2–3 not met, nothing shipped) |
-| **8: Futures positioning** | CFTC Traders in Financial Futures for CME Bitcoin (weekly, since Dec 2017): asset-manager timing, leveraged-fund contrarian timing, and a fifth check, all fixed in advance and backtest-only (see §5, *Phase 8*) | 2–3 days | Standing acceptance rule incl. the 1-point minimum gain; otherwise nothing ships |
+| **8: Futures positioning** | CFTC Traders in Financial Futures for CME Bitcoin (weekly, since Dec 2017): asset-manager timing, leveraged-fund contrarian timing, and a fifth check, all fixed in advance and backtest-only (see §5, *Phase 8*) | 2–3 days | Standing acceptance rule incl. the 1-point minimum gain; otherwise nothing ships (not met: nothing shipped) |
 | **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
@@ -611,7 +632,7 @@ Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`
 - Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 (futures funding) tested in the backtest and not shipped: the promising result rested on a few episodes. See §5 *Phase 5*.
 - Phase 6 (learned weights, backtest only): learned weights beat the current rules on held-out years but within chance, and leaned on mean reversion; not shipped. Volume is the only check with a measurable contribution; no rating's next-month returns differ reliably from any coin's in the right direction. See §5 *Phase 6*.
 - Phase 7: Step 1 built (the in-app Backtest page shows each rating's median, wins, losses, worst case and 90% range against the yardstick). Steps 2–3 tested and not shipped: no volume variant improves on the current reading beyond chance, and stablecoin supply failed both as market timing and as a fifth check. See §5 *Phase 7*.
-- Phase 8 (CME futures positioning from the CFTC, backtest only): planned. See §5 *Phase 8*.
+- Phase 8 (CME futures positioning from the CFTC, backtest only): tested, not shipped. Following asset managers came closest of anything tested (+3.9 points over the current rules on held-out years) but rests on a handful of episodes and its range includes 0; betting against leveraged funds collapsed once the ETF basis trade began. See §5 *Phase 8*.
 
 ---
 

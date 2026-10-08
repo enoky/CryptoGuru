@@ -245,3 +245,31 @@ Market timing, picked level: **Fails**: not above the current rules; not above 9
 Fifth check: **Fails**: not above the current rules; not above 90-day momentum; positive in only 2 of 4 held-out years; the range of its difference from the current rules includes 0.
 
 Acceptance: on the held-out years, a higher spread than the current rules and 90-day momentum, positive in most years, and a 90% range for the difference from the current rules that excludes 0.
+
+---
+
+<!-- Copied from .github/workflows/backtest.yml run 37845468180 (commit a9952d3), the Phase 8 run. -->
+
+## CME futures positioning (Phase 8), next 30 days
+
+443 weekly CFTC Traders in Financial Futures reports for CME Bitcoin futures from 2018-04-10 (CFTC public reporting API). Each report counts from the Saturday after its Tuesday positions date, when it had been published. Readings are market-wide, so timing rules give every coin the same call on a day. Asset managers: change in net position (% of open interest) over 4 reports. Leveraged funds: net position's place among the previous 52 reports. Settings were picked on the tuning years (up to 2022).
+
+| Rules | Judged on | Spread, tuning (avg of years) | Spread, held-out (avg of years) | Held-out years positive | Held-out pooled [90% range] | Difference from current rules, held-out [90% range] |
+|---|---|---|---|---|---|---|
+| Current rules | up or down | −8.12 | −1.90 | 2 of 4 | −1.45 [−7.25 to +4.92] | — |
+| 90-day momentum | up or down | −2.56 | −1.80 | 1 of 4 | −0.34 [−6.26 to +5.69] | −2.78 to +5.25 |
+| Follow asset managers (4-week change beyond ±0 points) | up or down | −1.45 | −4.12 | 1 of 4 | −3.74 [−11.65 to +3.60] | −11.04 to +5.76 |
+| Follow asset managers (4-week change beyond ±2 points) | up or down | +1.00 | −3.34 | 2 of 4 | −4.24 [−16.06 to +6.30] | −14.17 to +7.69 |
+| Follow asset managers (4-week change beyond ±5 points) ← picked | up or down | +9.38 | +1.95 | 2 of 3 | +5.97 [−8.21 to +23.05] | −5.57 to +22.57 |
+| Against leveraged funds at extremes (top / bottom fifth of 52 weeks) | up or down | +18.71 | −4.62 | 0 of 2 | +0.55 [−8.91 to +11.60] | −8.02 to +12.06 |
+| Current rules + asset-manager change as a fifth check (weight 15) | up or down | −8.67 | −2.18 | 2 of 4 | −1.36 [−8.27 to +6.06] | −2.09 to +2.11 |
+
+Follow asset managers, picked level: **Fails**: the range of its difference from the current rules includes 0.
+
+Against leveraged funds: **Fails**: not above the current rules; not above 90-day momentum; positive in only 0 of 2 held-out years; the range of its difference from the current rules includes 0.
+
+Fifth check: **Fails**: not above the current rules; not above 90-day momentum; positive in only 2 of 4 held-out years; the range of its difference from the current rules includes 0.
+
+Acceptance: on the held-out years, a spread at least 1 point above the current rules and above 90-day momentum, positive in most years, and a 90% range for the difference from the current rules that excludes 0.
+
+Caveats: since the US spot ETFs launched (January 2024) much of the leveraged-fund short is a basis trade (short futures, long the ETF), not a view on price. Reports delayed by US government shutdowns (early 2019, late 2025) were published weeks late, so on those weeks this backtest uses them a little earlier than anyone could have.
