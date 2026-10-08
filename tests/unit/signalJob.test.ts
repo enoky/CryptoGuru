@@ -6,8 +6,8 @@ import { BINANCE_BASE } from '../../shared/sources/binance';
 import { COINGECKO_BASE } from '../../shared/sources/coingecko';
 import { KRAKEN_BASE } from '../../shared/sources/kraken';
 import type { Asset, Snapshot } from '../../shared/types';
-import { BATCH, COINGECKO_REFRESH_MS, refreshSignals, SIGNAL_DAYS, SIGNAL_REFRESH_MS } from '../../worker/signals';
-import { cgChart, healthyRoutes } from '../helpers/data';
+import { BATCH, COINGECKO_REFRESH_MS, PEGGED_RECHECK_MS, refreshSignals, SIGNAL_DAYS, SIGNAL_REFRESH_MS } from '../../worker/signals';
+import { cgChart, healthyRoutes, wobble } from '../helpers/data';
 import { mockFetch } from '../helpers/mockFetch';
 
 const NOW = 1_800_000_000_000;
@@ -16,8 +16,15 @@ const DAY = 86_400_000;
 /** 365 daily klines ending at `price`, newest today. */
 const dailyKlines = (price: number) =>
   Array.from({ length: 365 }, (_, i) => {
-    const p = price * (0.7 + (0.3 * i) / 364);
+    const p = price * (0.7 + (0.3 * i) / 364 + wobble(i, 365));
     return [NOW - (364 - i) * DAY - DAY / 2, String(p), String(p), String(p), String(p), '100', 0];
+  });
+
+/** A tokenised fund: 365 days at about $1.08. */
+const flatKlines = (price: number) =>
+  Array.from({ length: 365 }, (_, i) => {
+    const p = String(price * (1 + (i % 2) / 10_000));
+    return [NOW - (364 - i) * DAY - DAY / 2, p, p, p, p, '100', 0];
   });
 
 const asset = (id: string, symbol: string, price: number): Asset => ({ id, symbol, name: id, price, rank: 1 }) as Asset;
@@ -31,7 +38,8 @@ const snapshot = (assets: Asset[]): Snapshot => ({
 
 const routes = (over = {}) =>
   healthyRoutes({
-    [`${BINANCE_BASE}/klines`]: (url: string) => (url.includes('symbol=NOPAIR') ? 400 : dailyKlines(url.includes('symbol=ETH') ? 3000 : 100)),
+    [`${BINANCE_BASE}/klines`]: (url: string) =>
+      url.includes('symbol=NOPAIR') ? 400 : url.includes('symbol=FUND') ? flatKlines(1.08) : dailyKlines(url.includes('symbol=ETH') ? 3000 : 100),
     [`${KRAKEN_BASE}/OHLC`]: () => ({ error: ['EQuery:Unknown asset pair'] }),
     [`${COINGECKO_BASE}/coins/`]: () => cgChart(50, 365),
     ...over,
@@ -103,7 +111,7 @@ describe('refreshSignals', () => {
     const r = await run(null, [a]);
     expect(r.doc.items.ethereum.metrics.turnover).toBe(0.5);
     expect(r.doc.items.ethereum.metrics.athChangePct).toBe(-40);
-    expect(r.doc.items.ethereum.adjustments).toContain('thin');
+    expect(r.doc.items.ethereum.cautions).toContain('thin');
   });
 
   it('starts again from scratch when the stored ratings are in an older format', async () => {
@@ -112,6 +120,27 @@ describe('refreshSignals', () => {
     expect(r.rated).toEqual(['bitcoin']);
     expect(r.doc.version).toBe(2);
     expect(r.doc.items.bitcoin.trendParts).toBeDefined();
+  });
+
+  it('doesn’t rate gold tokens or stablecoins missing from the list, and finds pegged prices by how little they move', async () => {
+    const r = await run(null, [asset('pax-gold', 'PAXG', 2400), asset('fund', 'FUND', 1.08), asset('bitcoin', 'BTC', 100)]);
+    expect(r.rated).toEqual(['bitcoin']);
+    expect(r.calls.some((u) => u.includes('symbol=PAXG'))).toBe(false);
+    expect(r.doc.pegged).toEqual({ fund: NOW });
+    expect(r.doc.items.fund).toBeUndefined();
+    expect(r.doc.skipped.fund).toBeUndefined();
+  });
+
+  it('checks a pegged coin again only once a day, and rates it if its price starts moving', async () => {
+    const assets = [asset('fund', 'FUND', 1.08)];
+    const first = await run(null, assets);
+    const later = await run(first.doc, assets, undefined, 45, NOW + SIGNAL_REFRESH_MS);
+    expect(later.calls.some((u) => u.includes('symbol=FUND'))).toBe(false);
+    // A day later its price moves like a coin's.
+    const moving = mockFetch(routes({ [`${BINANCE_BASE}/klines`]: () => dailyKlines(1.08) }));
+    const nextDay = await run(later.doc, assets, moving, 45, NOW + PEGGED_RECHECK_MS);
+    expect(nextDay.rated).toEqual(['fund']);
+    expect(nextDay.doc.pegged).toEqual({});
   });
 
   it('drops coins that left the top 100', async () => {

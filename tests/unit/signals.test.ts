@@ -6,7 +6,8 @@ import {
   computeSignal,
   dirOf,
   graded,
-  isStablecoin,
+  hasPeggedPrice,
+  isPeggedSymbol,
   labelFor,
   marketContext,
   topReasons,
@@ -169,19 +170,24 @@ describe('labelFor', () => {
 });
 
 describe('combine', () => {
-  it('scores all-bullish as +100 with high confidence', () => {
+  it('scores all-bullish as +100 with high agreement', () => {
     expect(combine(groups({ trend: 1, strength: 1, rsi: 1, volume: 1 }), base)).toEqual({
       score: 100,
       label: 'Strong bullish signals',
       tone: 'bullish',
-      confidence: 'High',
-      adjustments: [],
+      agreement: 'High',
+      cautions: [],
     });
   });
 
   it('weights groups and keeps their strength: trend 45 × 0.5 + strength 25 against RSI 15', () => {
     // (22.5 + 25 − 15) / 100 = 32.5 → 33; two of three clear readings agree.
-    expect(combine(groups({ trend: 0.5, strength: 1, rsi: -1 }), base)).toMatchObject({ score: 33, tone: 'bullish', confidence: 'Medium' });
+    expect(combine(groups({ trend: 0.5, strength: 1, rsi: -1 }), base)).toMatchObject({ score: 33, tone: 'bullish', agreement: 'Medium' });
+  });
+
+  it('rates agreement Low when fewer than half the clear readings point the overall way', () => {
+    // Trend alone carries the score (45 × 0.6 − 25 × 0.3 − 15 = 4.5 → mixed); for a mixed score, agreement is the share of neutral groups.
+    expect(combine(groups({ trend: 0.6, strength: -0.3, rsi: -1, volume: 0 }), base)).toMatchObject({ label: 'Mixed / neutral', agreement: 'Low' });
   });
 
   it('Fear & Greed never changes the score', () => {
@@ -189,12 +195,12 @@ describe('combine', () => {
     expect(combine(g, { ...base, fearGreed: 10 })!.score).toBe(combine(g, { ...base, fearGreed: 90 })!.score);
   });
 
-  it('rescales over the groups that had data and lowers confidence with fewer than 3', () => {
-    // Trend 45 + volume 15, both bullish: 100, all agree (High), lowered for having only 2 groups.
+  it('rescales over the groups that had data, with a caution for fewer than 3', () => {
+    // Trend 45 + volume 15, both bullish: 100, all agree.
     const r = combine(groups({ trend: 1, strength: null, rsi: null, volume: 1 }), base)!;
     expect(r.score).toBe(100);
-    expect(r.confidence).toBe('Medium');
-    expect(r.adjustments).toEqual(['fewChecks']);
+    expect(r.agreement).toBe('High');
+    expect(r.cautions).toEqual(['fewChecks']);
   });
 
   it('gives no rating without a trend reading or with only one group', () => {
@@ -202,26 +208,26 @@ describe('combine', () => {
     expect(combine(groups({ trend: 1, strength: null, rsi: null, volume: null }), base)).toBeNull();
   });
 
-  it('lowers confidence for high volatility and thin trading, one level each', () => {
+  it('lists cautions for high volatility and thin trading without changing the agreement', () => {
     const g = groups({ trend: 1, strength: 1, rsi: 1, volume: 1 });
-    expect(combine(g, { ...base, volatility: 95 })).toMatchObject({ confidence: 'Medium', adjustments: ['volatile'] });
-    expect(combine(g, { ...base, volatility: 95, turnover: 0.5 })).toMatchObject({ confidence: 'Low', adjustments: ['volatile', 'thin'] });
+    expect(combine(g, { ...base, volatility: 95 })).toMatchObject({ agreement: 'High', cautions: ['volatile'] });
+    expect(combine(g, { ...base, volatility: 95, turnover: 0.5 })).toMatchObject({ agreement: 'High', cautions: ['volatile', 'thin'] });
   });
 
-  it('lowers confidence when the market leans against the reading, at most one level for market reasons', () => {
+  it('lists a caution when the market leans against the reading', () => {
     const bull = groups({ trend: 1, strength: 1, rsi: 1, volume: 1 });
     const bear = groups({ trend: -1, strength: -1, rsi: -1, volume: -1 });
-    expect(combine(bull, { ...base, fearGreed: 80 })).toMatchObject({ confidence: 'Medium', adjustments: ['greed'] });
-    expect(combine(bull, { ...base, breadth: 20 })).toMatchObject({ confidence: 'Medium', adjustments: ['weakMarket'] });
-    expect(combine(bull, { ...base, fearGreed: 80, breadth: 20 })).toMatchObject({ confidence: 'Medium', adjustments: ['greed', 'weakMarket'] });
-    expect(combine(bear, { ...base, fearGreed: 20 })).toMatchObject({ confidence: 'Medium', adjustments: ['fear'] });
-    expect(combine(bear, { ...base, breadth: 80 })).toMatchObject({ confidence: 'Medium', adjustments: ['strongMarket'] });
-    // A crowd leaning the same way as a bearish reading isn't held against it.
-    expect(combine(bear, { ...base, fearGreed: 80, breadth: 20 })).toMatchObject({ confidence: 'High', adjustments: [] });
+    expect(combine(bull, { ...base, fearGreed: 80 })!.cautions).toEqual(['greed']);
+    expect(combine(bull, { ...base, breadth: 20 })!.cautions).toEqual(['weakMarket']);
+    expect(combine(bull, { ...base, fearGreed: 80, breadth: 20 })!.cautions).toEqual(['greed', 'weakMarket']);
+    expect(combine(bear, { ...base, fearGreed: 20 })!.cautions).toEqual(['fear']);
+    expect(combine(bear, { ...base, breadth: 80 })!.cautions).toEqual(['strongMarket']);
+    // A crowd leaning the same way as a bearish reading isn't a caution.
+    expect(combine(bear, { ...base, fearGreed: 80, breadth: 20 })).toMatchObject({ agreement: 'High', cautions: [] });
   });
 
-  it('rates a mostly-neutral picture as mixed with high confidence', () => {
-    expect(combine(groups({}), base)).toMatchObject({ score: 0, label: 'Mixed / neutral', confidence: 'High' });
+  it('rates a mostly-neutral picture as mixed with high agreement', () => {
+    expect(combine(groups({}), base)).toMatchObject({ score: 0, label: 'Mixed / neutral', agreement: 'High' });
   });
 });
 
@@ -295,8 +301,29 @@ describe('helpers', () => {
     expect(topReasons({ tone: 'bullish', signals: groups({ trend: 0.3, strength: 1 }) })).toEqual(['strength', 'trend']);
   });
 
-  it('knows stablecoins', () => {
-    expect(isStablecoin('usdt')).toBe(true);
-    expect(isStablecoin('BTC')).toBe(false);
+  it('knows stablecoins and gold tokens by symbol', () => {
+    expect(isPeggedSymbol('usdt')).toBe(true);
+    expect(isPeggedSymbol('PAXG')).toBe(true);
+    expect(isPeggedSymbol('BTC')).toBe(false);
+  });
+});
+
+describe('hasPeggedPrice', () => {
+  const wiggle = (n: number, size: number) => daily(Array.from({ length: n }, (_, i) => 100 * (1 + (i % 2 ? size : -size))));
+
+  it('catches a price that barely moves, like a tokenised fund or a euro token', () => {
+    expect(hasPeggedPrice(daily(Array.from({ length: 120 }, (_, i) => 1.08 + i * 0.0001)))).toBe(true);
+    // Daily swings of ±0.2% (about 7% a year, like the euro against the dollar).
+    expect(hasPeggedPrice(wiggle(120, 0.002))).toBe(true);
+  });
+
+  it('leaves real coins alone, even in a quiet stretch', () => {
+    // ±1% a day is about 38% a year: a calm month for Bitcoin.
+    expect(hasPeggedPrice(wiggle(120, 0.01))).toBe(false);
+  });
+
+  it('needs at least a month of prices to decide', () => {
+    expect(hasPeggedPrice(daily(Array(30).fill(1)))).toBe(false);
+    expect(hasPeggedPrice(daily(Array(31).fill(1)))).toBe(true);
   });
 });

@@ -170,6 +170,8 @@ test('signals screener lists, filters and explains ratings', async ({ page }) =>
   const total = await rows.count();
   expect(total).toBeGreaterThan(40);
   await expect(page.getByRole('link', { name: /^Tether:/ })).toHaveCount(0); // stablecoins aren't rated
+  await expect(page.getByRole('link', { name: /^Tokenised Fund:/ })).toHaveCount(0); // nor is anything else whose price is pegged
+  await expect(rows.first()).toHaveAttribute('aria-label', /(high|medium|low) agreement/);
   await expectNoHorizontalScroll(page);
   await expectTapTargets(page);
   await axe(page);
@@ -194,7 +196,8 @@ test('coin page shows its signal with plain-English reasons', async ({ page }) =
   const card = page.getByRole('region', { name: 'Signals' });
   await expect(card).toBeVisible();
   await expect(card).toContainText(/Strong bullish signals|Leaning bullish|Mixed \/ neutral|Leaning bearish|Strong bearish signals/);
-  await expect(card).toContainText('confidence');
+  await expect(card).toContainText(/(High|Medium|Low) agreement/);
+  await expect(card).not.toContainText(/confidence/i);
   await expect(card.getByRole('img', { name: /^Score/ })).toBeVisible();
   await expectNoHorizontalScroll(page);
   await expectTapTargets(page);
@@ -236,9 +239,12 @@ test('other coins are measured against Bitcoin, with market context that never c
   await expect(why).toContainText('Market context never changes the score');
 });
 
-test('stablecoins say why they are not rated', async ({ page }) => {
+test('stablecoins and other pegged assets say why they are not rated', async ({ page }) => {
   await page.goto('/#/asset/tether');
-  await expect(page.getByText(/is a stablecoin/)).toBeVisible();
+  await expect(page.getByText(/Tether is a pegged asset/)).toBeVisible();
+  // Not on the stablecoin list: recognised because its price barely moves.
+  await page.goto('/#/asset/tokenised-fund');
+  await expect(page.getByText(/Tokenised Fund is a pegged asset/)).toBeVisible();
 });
 
 test('if the ratings service is down, coin pages still work out their own signal', async ({ page }) => {
@@ -318,7 +324,7 @@ test('backtest shows how often signals were right, against the any-day yardstick
   const ratings = page.getByRole('region', { name: 'Overall ratings' }).getByRole('listitem');
   await expect(ratings).toHaveCount(5);
   await expect(page.getByRole('region', { name: 'Each check' }).getByRole('listitem')).toHaveCount(4);
-  await expect(page.getByRole('region', { name: 'Does confidence mean anything?' }).getByRole('listitem')).toHaveCount(3);
+  await expect(page.getByRole('region', { name: 'Were ratings right more often when the checks agreed?' }).getByRole('listitem')).toHaveCount(3);
   await expect(page.getByText(/\d+ coins · /)).toContainText('20 coins'); // the 20 largest after skipping Tether
   await expectNoHorizontalScroll(page);
   await expectTapTargets(page);

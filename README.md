@@ -7,10 +7,10 @@ Live prices, charts and plain-English market context for the top 100 crypto asse
 - **Watchlist:** saved on the device only; reorder or remove in edit mode.
 - **Robust:** every data type has backup sources; if everything is down the app shows the last saved data with a clear "as of" time.
 - **Works offline and installs like an app:** after one visit it opens with no connection; add it to your home screen from the About tab.
-- **How reliable are signals?** A backtest replays the rules on ~2½ years of prices for the 20 largest coins and shows how often each check was followed by a rise or fall, next to how often prices rose on any day, and whether confidence meant anything. A larger backtest over the whole top 100 runs on GitHub ([first results](docs/backtest.md)).
+- **How reliable are signals?** A backtest replays the rules on ~2½ years of prices for the 20 largest coins and shows how often each check was followed by a rise or fall, next to how often prices rose on any day, and whether ratings were right more often when the checks agreed. A larger backtest over the whole top 100 runs on GitHub ([first results](docs/backtest.md)).
 - **Move your watchlist:** save it to a file and load it on another phone (Watchlist → ⋯).
 - **Your currency:** USD, EUR, GBP, CAD, AUD, JPY, INR or CHF (top bar), converted with CoinGecko's exchange rates.
-- **Signals:** four checks per coin (trend, which averages the 200-day trend, 50/200 cross and MACD; strength vs Bitcoin; RSI read with the trend; volume) combined into a −100…+100 score with a confidence level, plus market context that never changes the score (Fear & Greed, breadth, liquidity, distance from the all-time high). Every reason is spelled out in plain English. The Signals tab ranks and filters all coins. Not predictions or financial advice.
+- **Signals:** four checks per coin (trend, which averages the 200-day trend, 50/200 cross and MACD; strength vs Bitcoin; RSI read with the trend; volume) combined into a −100…+100 score with an agreement level (how many checks point the same way) and any cautions, plus market context that never changes the score (Fear & Greed, breadth, liquidity, distance from the all-time high). Every reason is spelled out in plain English. Stablecoins and other pegged assets (found by how little their price moves) aren't rated. The Signals tab ranks and filters all coins. Not predictions or financial advice.
 
 See [`PLAN.md`](./PLAN.md) for the full design and [`PROMPT.md`](./PROMPT.md) for the brief it came from.
 

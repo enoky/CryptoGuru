@@ -1,4 +1,4 @@
-import { dirOf, THRESHOLDS, volScale, type Adjustment, type CoinSignal, type GroupKey, type Metrics, type TrendPartKey } from '../../shared/signals';
+import { dirOf, THRESHOLDS, volScale, type Caution, type CoinSignal, type GroupKey, type Metrics, type TrendPartKey } from '../../shared/signals';
 import { formatPrice } from './format';
 
 const pct = (n: number, digits = 0) => `${Math.abs(n).toFixed(digits)}%`;
@@ -145,8 +145,8 @@ export function explainContext(m: Metrics): { key: string; title: string; text: 
   return out;
 }
 
-/** Why confidence was lowered, one sentence each. */
-export function explainAdjustment(a: Adjustment, m: Metrics): string {
+/** Reasons for caution, one sentence each. */
+export function explainCaution(a: Caution, m: Metrics): string {
   const T = THRESHOLDS;
   switch (a) {
     case 'volatile':

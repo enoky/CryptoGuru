@@ -11,7 +11,7 @@ import { expect, it } from 'vitest';
 import { completedDays, dayKey, marketHistory, readings } from '../../shared/backtest';
 import { fetchCandleSet } from '../../shared/candles';
 import { CircuitBreaker } from '../../shared/failover';
-import { isStablecoin } from '../../shared/signals';
+import { hasPeggedPrice, isPeggedSymbol } from '../../shared/signals';
 import * as coingecko from '../../shared/sources/coingecko';
 import { fetchFearGreedHistory } from '../../shared/sources/feargreed';
 import type { Asset, Candle } from '../../shared/types';
@@ -34,7 +34,7 @@ async function history(a: Asset, now: number): Promise<Candle[] | null> {
 
 it('backtests every rated coin', async () => {
   const now = Date.now();
-  const assets = (await coingecko.fetchMarkets(fetch, { apiKey: process.env.COINGECKO_DEMO_KEY || undefined })).filter((a) => !isStablecoin(a.symbol));
+  const assets = (await coingecko.fetchMarkets(fetch, { apiKey: process.env.COINGECKO_DEMO_KEY || undefined })).filter((a) => !isPeggedSymbol(a.symbol));
   const fearGreed = new Map((await fetchFearGreedHistory(fetch)).map((r) => [dayKey(r.t), r.value]));
 
   // A few downloads at a time, to stay well inside the exchanges' rate limits.
@@ -49,13 +49,17 @@ it('backtests every rated coin', async () => {
   };
   await Promise.all([lane(), lane(), lane()]);
 
-  const coins = got.filter((c): c is { id: string; candles: Candle[] } => !!c);
+  const downloaded = got.filter((c): c is { id: string; candles: Candle[] } => !!c);
+  // Like the live job: a price that barely moves is pegged, and isn't rated.
+  const coins = downloaded.filter((c) => !hasPeggedPrice(c.candles));
+  const peggedIds = new Set(downloaded.filter((c) => hasPeggedPrice(c.candles)).map((c) => c.id));
+  const pegged = assets.filter((a) => peggedIds.has(a.id)).map((a) => a.name);
   const market = marketHistory(coins);
   const byCoin = coins.map((c) => ({ id: c.id, readings: readings(c.id, c.candles, market, fearGreed) }));
   const tested = new Set(byCoin.filter((c) => c.readings.length).map((c) => c.id));
-  const missing = assets.filter((a) => !tested.has(a.id)).map((a) => a.name);
+  const missing = assets.filter((a) => !tested.has(a.id) && !peggedIds.has(a.id)).map((a) => a.name);
 
-  const report = toMarkdown(compare(byCoin, missing), now);
+  const report = toMarkdown(compare(byCoin, missing, pegged), now);
   writeFileSync(process.env.BACKTEST_REPORT || 'backtest-report.md', report);
   console.log(report);
   expect(tested.size).toBeGreaterThanOrEqual(30);

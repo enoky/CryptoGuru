@@ -11,7 +11,7 @@ import type { Candle, SourceName } from './types';
  * checks measure much the same thing, so they are averaged into one group
  * rather than voting three times. Fear & Greed, market breadth, liquidity and
  * distance from the all-time high are market context: they never change the
- * score, only the confidence.
+ * score; they are listed as cautions when they lean against a rating.
  */
 export const GROUPS = [
   { key: 'trend', name: 'Trend', weight: 45 },
@@ -54,7 +54,7 @@ export const THRESHOLDS = {
   /** Thresholds above widen for coins more volatile than this (annualized %), up to `volScaleMax` times. */
   volScaleFrom: 60,
   volScaleMax: 3,
-  /** A group reading counts as bullish or bearish (for confidence and the backtest) from ±0.25. */
+  /** A group reading counts as bullish or bearish (for agreement and the backtest) from ±0.25. */
   clear: 0.25,
   highVolatility: 80,
   /** 24h volume under this % of market cap counts as thinly traded. */
@@ -69,11 +69,12 @@ export const THRESHOLDS = {
 } as const;
 
 export type SignalLabel = 'Strong bullish signals' | 'Leaning bullish' | 'Mixed / neutral' | 'Leaning bearish' | 'Strong bearish signals';
-export type Confidence = 'High' | 'Medium' | 'Low';
+/** How many of the scored checks point the same way. It says nothing about how often a rating has been right. */
+export type Agreement = 'High' | 'Medium' | 'Low';
 export type Tone = 'bullish' | 'bearish' | 'neutral';
 
-/** Why confidence was lowered. */
-export type Adjustment = 'volatile' | 'fewChecks' | 'thin' | 'greed' | 'fear' | 'weakMarket' | 'strongMarket';
+/** Reasons to treat a rating with extra caution, listed with it. They don't change the score or the agreement. */
+export type Caution = 'volatile' | 'fewChecks' | 'thin' | 'greed' | 'fear' | 'weakMarket' | 'strongMarket';
 
 /** Market-wide and per-coin context that comes from outside the coin's candles. */
 export interface SignalContext {
@@ -124,8 +125,8 @@ export interface CoinSignal extends Checks {
   score: number;
   label: SignalLabel;
   tone: Tone;
-  confidence: Confidence;
-  adjustments: Adjustment[];
+  agreement: Agreement;
+  cautions: Caution[];
 }
 
 export interface MarketContext {
@@ -144,6 +145,8 @@ export interface SignalsDoc {
   items: Record<string, CoinSignal>;
   /** Coins attempted but not rated (too little history or no data), with when. */
   skipped: Record<string, number>;
+  /** Coins whose price turned out to be pegged (see hasPeggedPrice), with when that was last checked. Not rated. */
+  pegged: Record<string, number>;
   market: MarketContext;
 }
 
@@ -152,12 +155,37 @@ export const emptySignalsDoc = (): SignalsDoc => ({
   asOf: 0,
   items: {},
   skipped: {},
+  pegged: {},
   market: { btcReturn90d: null, breadth: null, breadthCoins: 0 },
 });
 
-/** Pegged to ~$1, so trend signals mean nothing. */
-export const STABLECOINS = new Set(['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDE', 'USDS', 'PYUSD', 'USD1', 'BUSD', 'USDD', 'FRAX', 'GUSD', 'USDP', 'LUSD', 'EURC', 'RLUSD', 'USDG', 'USDF', 'BFUSD', 'USD0', 'SUSDE', 'SUSDS']);
-export const isStablecoin = (symbol: string) => STABLECOINS.has(symbol.toUpperCase());
+/**
+ * Assets whose price tracks something outside crypto, so trend signals mean
+ * nothing: stablecoins and gold-backed tokens. Others (tokenised money-market
+ * funds, newer stablecoins) are caught by how little their price moves.
+ */
+export const PEGGED_SYMBOLS = new Set([
+  'USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDE', 'USDS', 'PYUSD', 'USD1', 'BUSD', 'USDD', 'FRAX', 'GUSD', 'USDP', 'LUSD', 'EURC', 'RLUSD',
+  'USDG', 'USDF', 'BFUSD', 'USD0', 'SUSDE', 'SUSDS', 'GHO', 'USDY', 'USYC', 'BUIDL', 'USDTB', 'USDX',
+  // Gold: moves like gold, not like crypto.
+  'XAUT', 'PAXG', 'KAU', 'XAUM',
+]);
+export const isPeggedSymbol = (symbol: string) => PEGGED_SYMBOLS.has(symbol.toUpperCase());
+
+/**
+ * Annualized volatility (%) below which a price counts as pegged, whatever its
+ * symbol. Even Bitcoin's quietest 90 days stay far above this; a euro-pegged
+ * token moves about 7% a year.
+ */
+export const PEG_MAX_VOLATILITY = 10;
+
+/** True when the last 90 days (at least 30) of daily prices barely moved. */
+export function hasPeggedPrice(daily: Candle[]): boolean {
+  const window = Math.min(90, daily.length - 1);
+  if (window < 30) return false;
+  const v = annualizedVolatility(daily, window);
+  return v != null && v < PEG_MAX_VOLATILITY;
+}
 
 const DAY = 86_400_000;
 
@@ -270,16 +298,17 @@ export interface Combined {
   score: number;
   label: SignalLabel;
   tone: Tone;
-  confidence: Confidence;
-  adjustments: Adjustment[];
+  agreement: Agreement;
+  cautions: Caution[];
 }
 
 /**
  * Weighted score over the groups that had enough data (the trend group is
- * required). Confidence is the share of clear group readings that agree with
- * the overall direction (for a neutral score: the share that are themselves
- * neutral), then lowered one level for each of: high volatility, fewer than
- * 3 groups, thin trading, and market context leaning against the reading.
+ * required). Agreement is the share of clear group readings that point the
+ * overall way (for a neutral score: the share that are themselves neutral):
+ * 75% or more High, 50% or more Medium. Cautions are listed alongside: high
+ * volatility, fewer than 3 groups, thin trading, and market context leaning
+ * against the reading.
  */
 export function combine(signals: Record<GroupKey, number | null>, m: Metrics): Combined | null {
   const T = THRESHOLDS;
@@ -292,25 +321,20 @@ export function combine(signals: Record<GroupKey, number | null>, m: Metrics): C
   const dir: Sig = tone === 'bullish' ? 1 : tone === 'bearish' ? -1 : 0;
   const dirs = available.map((g) => dirOf(signals[g.key]));
   const pool = dir === 0 ? dirs : dirs.filter((d) => d !== 0);
-  const agreement = pool.length ? pool.filter((d) => d === dir).length / pool.length : 0;
-  let level = agreement >= 0.75 ? 2 : agreement >= 0.5 ? 1 : 0;
+  const share = pool.length ? pool.filter((d) => d === dir).length / pool.length : 0;
+  const agreement: Agreement = share >= 0.75 ? 'High' : share >= 0.5 ? 'Medium' : 'Low';
 
-  const adjustments: Adjustment[] = [];
-  if (m.volatility != null && m.volatility > T.highVolatility) adjustments.push('volatile');
-  if (available.length < 3) adjustments.push('fewChecks');
-  if (m.turnover != null && m.turnover < T.thinTurnover) adjustments.push('thin');
-  // Market context: a crowd that already agrees, or a market moving the other way. At most one level between them.
-  const market: Adjustment[] = [];
-  if (dir === 1 && m.fearGreed != null && m.fearGreed >= T.extremeGreed) market.push('greed');
-  if (dir === -1 && m.fearGreed != null && m.fearGreed <= T.extremeFear) market.push('fear');
-  if (dir === 1 && m.breadth != null && m.breadth < T.weakBreadth) market.push('weakMarket');
-  if (dir === -1 && m.breadth != null && m.breadth > T.strongBreadth) market.push('strongMarket');
-  adjustments.push(...market);
+  const cautions: Caution[] = [];
+  if (m.volatility != null && m.volatility > T.highVolatility) cautions.push('volatile');
+  if (available.length < 3) cautions.push('fewChecks');
+  if (m.turnover != null && m.turnover < T.thinTurnover) cautions.push('thin');
+  // Market context: a crowd that already agrees, or a market moving the other way.
+  if (dir === 1 && m.fearGreed != null && m.fearGreed >= T.extremeGreed) cautions.push('greed');
+  if (dir === -1 && m.fearGreed != null && m.fearGreed <= T.extremeFear) cautions.push('fear');
+  if (dir === 1 && m.breadth != null && m.breadth < T.weakBreadth) cautions.push('weakMarket');
+  if (dir === -1 && m.breadth != null && m.breadth > T.strongBreadth) cautions.push('strongMarket');
 
-  const steps = adjustments.length - Math.max(0, market.length - 1);
-  level = Math.max(0, level - steps);
-  const levels: Confidence[] = ['Low', 'Medium', 'High'];
-  return { score, label, tone, confidence: levels[level], adjustments };
+  return { score, label, tone, agreement, cautions };
 }
 
 export function computeSignal(id: string, daily: Candle[], source: SourceName, ctx: SignalContext, now: number): CoinSignal | null {

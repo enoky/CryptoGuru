@@ -66,7 +66,7 @@ describe('CoinGecko', () => {
   it('turns chart prices into flat candles', async () => {
     const candles = await coingecko.fetchCandles(mockFetch(healthyRoutes()), 'bitcoin', '7d', o);
     expect(candles).toHaveLength(168);
-    expect(candles[0]).toMatchObject({ o: 64000, h: 64000, l: 64000, c: 64000, v: 1e9 });
+    expect(candles.at(-1)).toMatchObject({ o: 64000, h: 64000, l: 64000, c: 64000, v: 1e9 });
   });
 });
 

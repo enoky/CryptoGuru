@@ -1,7 +1,10 @@
 /** Deterministic fake market data for browser tests, Lighthouse and `MOCK_API=1` local runs. */
 import { roundSig } from '../../shared/series';
-import { BTC_ID, computeSignal, emptySignalsDoc, isStablecoin, marketContext, type SignalsDoc } from '../../shared/signals';
+import { BTC_ID, computeSignal, emptySignalsDoc, hasPeggedPrice, isPeggedSymbol, marketContext, type SignalsDoc } from '../../shared/signals';
 import type { Asset, CandleSet, Range, Snapshot } from '../../shared/types';
+
+/** A tokenised money-market fund: price flat at about $1.08. */
+export const PEGGED_MOCK = 'tokenised-fund';
 
 const NAMES = [
   ['bitcoin', 'BTC', 'Bitcoin', 64210],
@@ -12,6 +15,8 @@ const NAMES = [
   ['dogecoin', 'DOGE', 'Dogecoin', 0.1234],
   ['shiba-inu', 'SHIB', 'Shiba Inu', 0.00001834],
   ['wrapped-bitcoin-with-a-very-long-name', 'WBTCLONG', 'Wrapped Bitcoin With A Very Long Name', 1234567.89],
+  // Not on the stablecoin list, but its price barely moves: caught as pegged by its price.
+  [PEGGED_MOCK, 'TFUND', 'Tokenised Fund', 1.08],
 ] as const;
 
 export function makeSnapshot(asOf = Date.now(), count = 60): Snapshot {
@@ -68,9 +73,12 @@ export function makeCandles(id: string, range: Range, price: number): CandleSet 
   const now = Date.now();
   const n = COUNT[range];
   const up = trendsUp(id);
+  const flat = id === PEGGED_MOCK;
   const candles = Array.from({ length: n }, (_, i) => {
     const progress = i / (n - 1);
-    const c = price * ((up ? 0.85 + 0.15 * progress : 1.15 - 0.15 * progress) + Math.sin(i / 7) / 40);
+    // Trend, a slow wave, and day-to-day noise of a few percent like a real coin (none for the pegged one).
+    const noise = (((i * 7919) % 13) - 6) / 250;
+    const c = flat ? price * (1 + (i % 3) / 10_000) : price * ((up ? 0.6 + 0.4 * progress : 1.6 - 0.6 * progress) + Math.sin(i / 7) / 40 + noise);
     return { t: now - (n - 1 - i) * STEP[range], o: c, h: c * 1.01, l: c * 0.99, c, v: 1e6 };
   });
   return { id, range, candles, asOf: now, source: 'binance' };
@@ -97,14 +105,19 @@ export function makeSignals(snapshot: Snapshot): SignalsDoc {
   const doc = emptySignalsDoc();
   const now = Date.now();
   // Like the Worker: Bitcoin first, since every other coin's strength is measured against it.
-  const coins = snapshot.markets!.data.filter((a) => !isStablecoin(a.symbol));
+  const coins = snapshot.markets!.data.filter((a) => !isPeggedSymbol(a.symbol));
   coins.sort((a, b) => Number(b.id === BTC_ID) - Number(a.id === BTC_ID));
   // Two passes, like the Worker after its first full cycle: the second has breadth over every coin.
   for (const a of [...coins, ...coins]) {
     const market = marketContext(doc.items);
     const turnover = a.volume24h != null && a.marketCap ? (a.volume24h / a.marketCap) * 100 : null;
     const ctx = { fearGreed: snapshot.fearGreed?.data.value ?? null, ...market, turnover, athChangePct: a.athChangePct };
-    const s = computeSignal(a.id, makeCandles(a.id, '1y', a.price).candles, 'binance', ctx, now);
+    const candles = makeCandles(a.id, '1y', a.price).candles;
+    if (hasPeggedPrice(candles)) {
+      doc.pegged[a.id] = now;
+      continue;
+    }
+    const s = computeSignal(a.id, candles, 'binance', ctx, now);
     if (s) doc.items[a.id] = s;
   }
   doc.asOf = now;

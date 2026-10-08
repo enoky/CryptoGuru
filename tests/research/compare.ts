@@ -1,4 +1,4 @@
-import { CONFIDENCES, HORIZONS, type Horizon, type Reading } from '../../shared/backtest';
+import { AGREEMENTS, HORIZONS, type Horizon, type Reading } from '../../shared/backtest';
 import { dirOf, GROUPS, type SignalLabel } from '../../shared/signals';
 import { v1Label } from './v1';
 
@@ -47,11 +47,13 @@ export const HALVES: Half[] = ['older', 'newer'];
 export interface Comparison {
   coins: string[];
   missing: string[];
+  /** Left out because the price barely moves (see hasPeggedPrice). */
+  pegged: string[];
   from: number;
   to: number;
   split: number;
   rules: Record<Half, Record<Horizon, Record<RuleKey, RuleStats>>>;
-  confidence: Record<Half, Record<Horizon, Record<string, { n: number; right: number }>>>;
+  agreement: Record<Half, Record<Horizon, Record<string, { n: number; right: number }>>>;
   groups: Record<Half, Record<Horizon, Record<string, { bull: { n: number; rose: number }; bear: { n: number; fell: number } }>>>;
 }
 
@@ -61,17 +63,18 @@ export function splitDate(all: Reading[][]): number {
   return ts.length ? ts[Math.floor(ts.length / 2)] : 0;
 }
 
-export function compare(byCoin: { id: string; readings: Reading[] }[], missing: string[] = []): Comparison {
+export function compare(byCoin: { id: string; readings: Reading[] }[], missing: string[] = [], pegged: string[] = []): Comparison {
   const split = splitDate(byCoin.map((c) => c.readings));
   const make = <T>(f: () => T) => ({ older: { 7: f(), 30: f() }, newer: { 7: f(), 30: f() } }) as Record<Half, Record<Horizon, T>>;
   const out: Comparison = {
     coins: byCoin.filter((c) => c.readings.length).map((c) => c.id),
     missing,
+    pegged,
     from: Infinity,
     to: -Infinity,
     split,
     rules: make(() => Object.fromEntries(RULES.map((r) => [r.key, emptyStats()])) as Record<RuleKey, RuleStats>),
-    confidence: make(() => Object.fromEntries(CONFIDENCES.map((c) => [c, { n: 0, right: 0 }]))),
+    agreement: make(() => Object.fromEntries(AGREEMENTS.map((c) => [c, { n: 0, right: 0 }]))),
     groups: make(() => Object.fromEntries(GROUPS.map((g) => [g.key, { bull: { n: 0, rose: 0 }, bear: { n: 0, fell: 0 } }]))),
   };
   for (const { readings } of byCoin) {
@@ -92,8 +95,8 @@ export function compare(byCoin: { id: string; readings: Reading[] }[], missing: 
           if (d === -1) (st.bear.n++, (st.bear.sum += ret), ret < 0 && st.bear.fell++);
           if (d === 1 || d === -1) (st.calls++, moved === d && st.right++);
         }
-        if (r.confidence && (dirs.current === 1 || dirs.current === -1)) {
-          const c = out.confidence[half][h][r.confidence];
+        if (r.agreement && (dirs.current === 1 || dirs.current === -1)) {
+          const c = out.agreement[half][h][r.agreement];
           c.n++;
           if (moved === dirs.current) c.right++;
         }
@@ -145,14 +148,14 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
       L.push('');
     }
   }
-  L.push('## Does confidence mean anything? (current rules)', '');
-  L.push(`| Confidence | ${HORIZONS.flatMap((h) => HALVES.map((half) => `${h}d ${half}`)).join(' | ')} |`);
+  L.push('## Were ratings right more often when the checks agreed? (current rules)', '');
+  L.push(`| Agreement | ${HORIZONS.flatMap((h) => HALVES.map((half) => `${h}d ${half}`)).join(' | ')} |`);
   L.push(`|---|${HORIZONS.flatMap(() => HALVES.map(() => '---')).join('|')}|`);
-  for (const conf of CONFIDENCES) {
-    const cells = HORIZONS.flatMap((h) => HALVES.map((half) => c.confidence[half][h][conf])).map((x) => `${pct(x.right, x.n)} (${num(x.n)})`);
+  for (const conf of AGREEMENTS) {
+    const cells = HORIZONS.flatMap((h) => HALVES.map((half) => c.agreement[half][h][conf])).map((x) => `${pct(x.right, x.n)} (${num(x.n)})`);
     L.push(`| ${conf} | ${cells.join(' | ')} |`);
   }
-  L.push('', 'Right = share of bullish or bearish ratings the price then agreed with (number of coin-days in brackets). High should beat Low.', '');
+  L.push('', 'Right = share of bullish or bearish ratings the price then agreed with (number of coin-days in brackets). If agreement helped, High would beat Low.', '');
   L.push('## Each check (current rules, next 30 days)', '');
   L.push('| Check | When bullish: rose (older / newer) | When bearish: fell (older / newer) |', '|---|---|---|');
   for (const g of GROUPS) {
@@ -170,9 +173,10 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
   L.push(
     '- Neighbouring days overlap (their windows share most days), and the coins move together, so there are far fewer independent results than the counts suggest.',
     '- Coins are today’s top 100: ones that collapsed and dropped out aren’t included, which flatters bullish calls.',
-    '- Past liquidity isn’t available, so it never lowers confidence here. Market breadth is measured over these coins.',
+    '- Past liquidity isn’t available. Market breadth is measured over these coins.',
     '- No trading costs, taxes or slippage. Not financial advice.',
   );
+  if (c.pegged.length) L.push(`- Pegged (price barely moves), not rated or tested: ${c.pegged.join(', ')}.`);
   if (c.missing.length) L.push(`- Left out (no exchange history, or too little of it): ${c.missing.join(', ')}.`);
   L.push('');
   return L.join('\n');

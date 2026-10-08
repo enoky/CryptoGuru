@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dirOf, GROUPS, TREND_PARTS, topReasons, type CoinSignal } from '../../shared/signals';
-  import { explainAdjustment, explainContext, explainGroup, explainPart, formatReading, formatScore } from '../lib/explain';
+  import { explainCaution, explainContext, explainGroup, explainPart, formatReading, formatScore } from '../lib/explain';
   import { formatTime, sourceLabel } from '../lib/format';
   import { volatilityLabel } from '../../shared/series';
   import BottomSheet from './BottomSheet.svelte';
@@ -22,7 +22,7 @@
     <span aria-hidden="true">{signal.tone === 'bullish' ? '▲' : signal.tone === 'bearish' ? '▼' : '–'}</span>
     {signal.label}
   </p>
-  <p class="text-sm text-muted">{signal.confidence} confidence · score {formatScore(signal.score)}</p>
+  <p class="text-sm text-muted">{signal.agreement} agreement · score {formatScore(signal.score)}</p>
   <ScoreBar score={signal.score} tone={signal.tone} class="mt-3" />
 
   <ul class="mt-3 space-y-2">
@@ -32,10 +32,10 @@
         <span class="text-[15px]">{explainGroup(key, signal)}</span>
       </li>
     {/each}
-    {#each signal.adjustments.slice(0, 1) as a}
+    {#each signal.cautions.slice(0, 1) as a}
       <li class="flex gap-2.5">
         <span class="grid size-6 shrink-0 place-items-center text-warn" aria-hidden="true">!</span>
-        <span class="text-[15px]">{explainAdjustment(a, signal.metrics)}</span>
+        <span class="text-[15px]">{explainCaution(a, signal.metrics)}</span>
       </li>
     {/each}
   </ul>
@@ -47,7 +47,7 @@
 </section>
 
 <BottomSheet bind:open title="Why this rating?">
-  <p class="font-semibold {toneText}">{signal.label} · {signal.confidence} confidence</p>
+  <p class="font-semibold {toneText}">{signal.label} · {signal.agreement} agreement</p>
   <p class="text-sm text-muted">{name} · score {formatScore(signal.score)} out of ±100</p>
   <ul class="mt-4 space-y-4">
     {#each GROUPS as g}
@@ -76,13 +76,13 @@
     {/each}
   </ul>
 
-  {#if signal.adjustments.length}
-    <h3 class="mt-5 font-semibold">Why confidence is lower</h3>
+  {#if signal.cautions.length}
+    <h3 class="mt-5 font-semibold">Reasons for caution</h3>
     <ul class="mt-2 space-y-2">
-      {#each signal.adjustments as a}
+      {#each signal.cautions as a}
         <li class="flex gap-2.5">
           <span class="grid size-6 shrink-0 place-items-center text-warn" aria-hidden="true">!</span>
-          <span class="text-[15px]">{explainAdjustment(a, signal.metrics)}</span>
+          <span class="text-[15px]">{explainCaution(a, signal.metrics)}</span>
         </li>
       {/each}
     </ul>
@@ -105,7 +105,8 @@
   <p class="mt-1 text-[15px] text-muted">
     Each check reads from −1 (bearish) to +1 (bullish), times its weight; the trend reading is the average of its three parts. The total
     is scaled to −100…+100 over the checks that had enough data. +15 or more leans bullish, +50 or more is strong; the same below zero
-    for bearish. Confidence is how many checks agree, lowered for the reasons listed above. Market context never changes the score.
+    for bearish. Agreement is how many of the checks point the same way; it isn’t a measure of how likely the rating is to be right.
+    Market context never changes the score.
   </p>
   <p class="mt-3 text-sm text-muted">
     Based on {signal.metrics.days} days of {sourceLabel(signal.source)} prices, calculated at {formatTime(signal.asOf)}.

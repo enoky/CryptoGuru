@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { avgReturn, CONFIDENCES, HORIZONS, LABELS, pctFell, pctRight, pctRose, type Horizon, type Tally } from '../../shared/backtest';
+  import { avgReturn, AGREEMENTS, HORIZONS, LABELS, pctFell, pctRight, pctRose, type Horizon, type Tally } from '../../shared/backtest';
   import { GROUPS } from '../../shared/signals';
   import HitBar from '../components/HitBar.svelte';
   import ErrorInline from '../components/ErrorInline.svelte';
@@ -143,16 +143,17 @@
   </section>
 
   <section class="mt-5" aria-labelledby="conf-heading">
-    <h2 id="conf-heading" class="mb-2 px-1 font-semibold">Does confidence mean anything?</h2>
+    <h2 id="conf-heading" class="mb-2 px-1 font-semibold">Were ratings right more often when the checks agreed?</h2>
     <div class="rounded-2xl border border-line bg-surface p-4">
       <p class="text-[15px] text-muted">
-        How often bullish and bearish ratings were right (the price went the way they leaned), by confidence. High should beat Low.
+        How often bullish and bearish ratings were right (the price went the way they leaned), by how much the checks agreed. If
+        agreement helped, High would beat Low; across all coins it hasn’t, which is why it’s called agreement, not confidence.
       </p>
       <ul class="mt-2 space-y-1.5">
-        {#each CONFIDENCES as c}
+        {#each AGREEMENTS as c}
           {@const h = r.calls[c]}
           <li class="flex items-baseline justify-between gap-3 text-[15px]">
-            <span class="font-medium">{c} confidence</span>
+            <span class="font-medium">{c} agreement</span>
             <span class="tabular-nums">
               {#if h.n}<strong>{pct0(pctRight(h))}</strong> right <span class="text-sm text-muted">· {count(h.n)} days</span>{:else}<span class="text-muted">didn’t occur</span>{/if}
             </span>
@@ -169,7 +170,7 @@
       <li>Neighbouring days overlap (their next-{horizon}-day windows share most days), so there are far fewer truly independent results than the day counts suggest.</li>
       <li>The {BACKTEST_COINS} coins move together, which shrinks the evidence further.</li>
       <li>The coins are today’s largest: ones that collapsed and left the top 100 aren’t included, which flatters the results.</li>
-      <li>Market breadth here covers these {BACKTEST_COINS} coins only (the live ratings use about 90), and past liquidity isn’t available, so it never lowers confidence here.</li>
+      <li>Market breadth here covers these {BACKTEST_COINS} coins only (the live ratings use about 90), and past liquidity isn’t available.</li>
       <li>No trading costs, taxes or slippage are included. This is not financial advice.</li>
     </ul>
     <p class="mt-3 text-sm text-muted">

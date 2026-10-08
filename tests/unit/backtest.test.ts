@@ -3,7 +3,7 @@ import {
   avgReturn,
   completedDays,
   contextFor,
-  CONFIDENCES,
+  AGREEMENTS,
   DAY,
   dayKey,
   emptyResult,
@@ -85,7 +85,7 @@ describe('readings', () => {
     const m = computeMetrics(window, contextFor('coin', daily[i].t, market, fg), daily[i].t + DAY)!;
     expect(m.btcReturn90d).not.toBeNull();
     expect(r.signals).toEqual(classify(m).signals);
-    expect(r.confidence).toBe(combine(classify(m).signals, m)!.confidence);
+    expect(r.agreement).toBe(combine(classify(m).signals, m)!.agreement);
     expect(r.returns[7]).toBeCloseTo(daily[i + 7].c / daily[i].c - 1, 12);
   });
 
@@ -99,7 +99,7 @@ describe('readings', () => {
 });
 
 describe('tally', () => {
-  it('counts every coin-day once per group and per label, and each directional rating once by confidence', () => {
+  it('counts every coin-day once per group and per label, and each directional rating once by agreement', () => {
     const daily = candles(walk(500, 7));
     const rs = readings('x', daily, null, null);
     const res = tally(emptyResult(), 'x', rs);
@@ -113,15 +113,15 @@ describe('tally', () => {
       }
       expect(Object.values(r.labels).reduce((a, t) => a + t.n, 0)).toBe(r.baseline.n);
       const directional = rs.filter((x) => x.returns[h] != null && x.label && !x.label.startsWith('Mixed')).length;
-      expect(CONFIDENCES.reduce((a, c) => a + r.calls[c].n, 0)).toBe(directional);
+      expect(AGREEMENTS.reduce((a, c) => a + r.calls[c].n, 0)).toBe(directional);
     }
   });
 
   it('counts a call as right when the price moved the way the rating leaned', () => {
     const r = tally(emptyResult(), 'x', [
-      { t: 0, metrics: {} as never, signals: {} as never, label: 'Leaning bullish', confidence: 'High', returns: { 7: 0.1, 30: null } },
-      { t: 1, metrics: {} as never, signals: {} as never, label: 'Strong bearish signals', confidence: 'High', returns: { 7: 0.1, 30: null } },
-      { t: 2, metrics: {} as never, signals: {} as never, label: 'Leaning bearish', confidence: 'Low', returns: { 7: -0.1, 30: null } },
+      { t: 0, metrics: {} as never, signals: {} as never, label: 'Leaning bullish', agreement: 'High', returns: { 7: 0.1, 30: null } },
+      { t: 1, metrics: {} as never, signals: {} as never, label: 'Strong bearish signals', agreement: 'High', returns: { 7: 0.1, 30: null } },
+      { t: 2, metrics: {} as never, signals: {} as never, label: 'Leaning bearish', agreement: 'Low', returns: { 7: -0.1, 30: null } },
     ]).horizons[7];
     expect(r.calls.High).toEqual({ n: 2, right: 1 });
     expect(pctRight(r.calls.Low)).toBe(100);
@@ -169,7 +169,7 @@ describe('tally', () => {
       rsiBullish: [h.groups.rsi.bullish.n, pctRose(h.groups.rsi.bullish)!.toFixed(1)],
       strongBullish: [h.labels['Strong bullish signals'].n],
       strongBearish: [h.labels['Strong bearish signals'].n],
-      highConfidenceRight: [h.calls.High.n, pctRight(h.calls.High)!.toFixed(1)],
+      highAgreementRight: [h.calls.High.n, pctRight(h.calls.High)!.toFixed(1)],
     };
     expect(summary).toMatchInlineSnapshot(`
       {
@@ -177,9 +177,9 @@ describe('tally', () => {
           2013,
           "63.9",
         ],
-        "highConfidenceRight": [
-          863,
-          "61.3",
+        "highAgreementRight": [
+          1371,
+          "60.5",
         ],
         "rsiBullish": [
           9,

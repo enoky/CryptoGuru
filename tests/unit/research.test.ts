@@ -29,7 +29,7 @@ const reading = (t: number, label: Reading['label'], ret: number, over: Partial<
   metrics: metrics(over),
   signals: { trend: 0, strength: null, rsi: 0, volume: 0 },
   label,
-  confidence: label && !label.startsWith('Mixed') ? 'High' : 'Medium',
+  agreement: label && !label.startsWith('Mixed') ? 'High' : 'Medium',
   returns: { 7: ret, 30: ret },
 });
 
@@ -59,7 +59,7 @@ describe('compare', () => {
       reading(4 * DAY, 'Mixed / neutral', 0.3, { return90d: -5 }),
     ];
     expect(splitDate([rs])).toBe(3 * DAY);
-    const c = compare([{ id: 'x', readings: rs }], ['Gone']);
+    const c = compare([{ id: 'x', readings: rs }], ['Gone'], ['Fund']);
     const older = c.rules.older[30].current;
     expect(older).toMatchObject({ days: 2, calls: 2, right: 2 });
     expect(spread(older)).toBeCloseTo(20, 10);
@@ -67,11 +67,12 @@ describe('compare', () => {
     expect(newer.current).toMatchObject({ days: 2, calls: 1, right: 0 });
     expect(newer.momentum).toMatchObject({ calls: 2, right: 0 });
     expect(newer.always).toMatchObject({ calls: 2, right: 1 });
-    expect(c.confidence.older[7].High).toEqual({ n: 2, right: 2 });
+    expect(c.agreement.older[7].High).toEqual({ n: 2, right: 2 });
     const md = toMarkdown(c, 0);
     expect(md).toContain('## Next 30 days, newer half');
     expect(md).toContain('| Current rules (Phase 4) | 2 (100.0%) | 100.0% | +10.00% | −10.00% | +20.00 pts |');
     expect(md).toContain('Left out (no exchange history, or too little of it): Gone.');
+    expect(md).toContain('Pegged (price barely moves), not rated or tested: Fund.');
   });
 
   it('runs end to end on real readings', () => {

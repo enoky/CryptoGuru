@@ -99,13 +99,13 @@
           <a
             href="#/asset/{a.id}"
             class="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 hover:bg-surface-2"
-            aria-label="{a.name}: {s.label}, {s.confidence.toLowerCase()} confidence, score {formatScore(s.score)}">
+            aria-label="{a.name}: {s.label}, {s.agreement.toLowerCase()} agreement, score {formatScore(s.score)}">
             <Logo src={a.image} symbol={a.symbol} />
             <div class="min-w-0">
               <div class="truncate font-medium">{a.name}</div>
               <div class="truncate text-sm {s.tone === 'bullish' ? 'text-up' : s.tone === 'bearish' ? 'text-down' : 'text-muted'}">
                 <span aria-hidden="true">{s.tone === 'bullish' ? '▲' : s.tone === 'bearish' ? '▼' : '–'}</span>
-                {s.label}<span class="text-muted">{` · ${s.confidence}`}</span>
+                {s.label}<span class="text-muted">{` · ${s.agreement} agreement`}</span>
               </div>
             </div>
             <div class="text-right">
@@ -119,7 +119,7 @@
   {/if}
   <p class="mt-3 px-1 text-sm {stale ? 'text-warn' : 'text-muted'}">
     {stale ? 'May be out of date · ' : ''}Ratings updated {formatTime(asOf)}. Each coin is re-rated about every 2 hours.
-    Stablecoins aren’t rated: their price is designed to stay at US$1.
+    Stablecoins and other pegged assets (tokenised funds, gold tokens) aren’t rated: their prices track something outside crypto.
   </p>
 {/if}
 
@@ -143,9 +143,10 @@
   </p>
   <p class="mt-3 text-[15px]">
     The weighted total gives a score from −100 to +100. +15 or more leans bullish and +50 or more is strong; the same below zero is
-    bearish. Confidence is how many checks agree. It’s lowered when a coin is very volatile, thinly traded or has little history, and
-    when the market mood or most other coins lean the other way. Fear &amp; Greed and the share of coins in an uptrend are shown as
-    context but never change the score.
+    bearish. Agreement is how many of the checks point the same way. It isn’t a measure of how likely a rating is to be right: in
+    the backtest, ratings the checks agreed on weren’t right more often. Separate cautions are listed when a coin is very volatile,
+    thinly traded or has little history, or when the market mood or most other coins lean the other way. Fear &amp; Greed and the
+    share of coins in an uptrend are shown as context but never change the score.
   </p>
   <p class="mt-3 text-[15px] text-muted">
     These checks only look at past prices and volume. They ignore news, fundamentals and regulation, they lag behind the price, and

@@ -72,15 +72,18 @@ export const PAPRIKA_TICKERS = [
 
 export const PAPRIKA_GLOBAL = { market_cap_usd: 2.3e12, market_cap_change_24h: 0.8, bitcoin_dominance_percentage: 55.5 };
 
-/** 1h/4h/1d klines ending near `price`. */
+/** Day-to-day wobble of a few percent, like a real coin (a smooth line would count as a pegged price); none on the last point. */
+export const wobble = (i: number, n: number) => (i === n - 1 ? 0 : (((i * 7919) % 13) - 6) / 300);
+
+/** 1h/4h/1d klines ending at `price`. */
 export const klines = (price: number, n = 168) =>
   Array.from({ length: n }, (_, i) => {
-    const p = price * (0.95 + (0.05 * i) / (n - 1));
+    const p = price * (0.95 + (0.05 * i) / (n - 1) + wobble(i, n));
     return [1_700_000_000_000 + i * 3_600_000, String(p), String(p * 1.01), String(p * 0.99), String(p), '100', 0, '0', 0, '0', '0', '0'];
   });
 
 export const cgChart = (price: number, n = 168) => ({
-  prices: Array.from({ length: n }, (_, i) => [1_700_000_000_000 + i * 3_600_000, price]),
+  prices: Array.from({ length: n }, (_, i) => [1_700_000_000_000 + i * 3_600_000, price * (1 + wobble(i, n))]),
   total_volumes: Array.from({ length: n }, (_, i) => [1_700_000_000_000 + i * 3_600_000, 1e9]),
 });
 

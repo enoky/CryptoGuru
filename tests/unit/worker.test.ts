@@ -144,6 +144,7 @@ describe('worker', () => {
           d: item('d', 'coingecko', 17), // stale
         },
         skipped: { c: now, e: now }, // c was retried (still has a rating); e has none
+        pegged: { f: now },
       }),
     );
     const body = (await (await call('/api/health')).json()) as { signals: Record<string, number> };
@@ -153,6 +154,7 @@ describe('worker', () => {
       fromCoinGecko: 2,
       unrated: 1,
       lastRunSecondsAgo: 300,
+      pegged: 1,
       market: { btcReturn90d: 12, breadth: 40, breadthCoins: 60 },
     });
   });

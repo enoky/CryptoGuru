@@ -1,14 +1,15 @@
 import { dayKey, type BacktestResult } from '../../shared/backtest';
-import { isStablecoin } from '../../shared/signals';
+import { hasPeggedPrice, isPeggedSymbol } from '../../shared/signals';
 import type { Asset, Candle } from '../../shared/types';
 import { loadFearGreedHistory, loadHistory } from './api';
 import type { BacktestJob, BacktestMessage } from './backtest.worker';
 import { assets } from './market.svelte';
+import { signalsState } from './signals.svelte';
 import { idbGet, idbSet } from './storage';
 
-/** The largest coins by market cap, stablecoins excluded. */
+/** The largest coins by market cap, stablecoins and other pegged assets excluded. */
 export const BACKTEST_COINS = 20;
-const KEY = 'backtest:v2';
+const KEY = 'backtest:v3';
 
 interface Cached {
   day: number;
@@ -44,15 +45,16 @@ export async function runBacktest(force = false) {
       return;
     }
     const coins = assets()
-      .filter((a) => !isStablecoin(a.symbol))
+      .filter((a) => !isPeggedSymbol(a.symbol) && signalsState.doc?.pegged[a.id] == null)
       .sort((a, b) => a.rank - b.rank)
       .slice(0, BACKTEST_COINS);
     if (coins.length === 0) throw new Error('Market data hasn’t loaded yet.');
 
     Object.assign(backtest, { status: 'loading', done: 0, total: coins.length, error: null, missing: [] });
     const [fearGreed, histories] = await Promise.all([loadFearGreedHistory().catch(() => []), downloadAll(coins)]);
-    const ok = histories.filter((h): h is NonNullable<typeof h> => !!h);
-    backtest.missing = coins.filter((c) => !ok.some((h) => h.id === c.id)).map((c) => c.name);
+    // A price that barely moves isn't worth testing trend signals on.
+    const ok = histories.filter((h): h is NonNullable<typeof h> => !!h && !hasPeggedPrice(h.candles));
+    backtest.missing = coins.filter((c) => !histories.some((h) => h?.id === c.id)).map((c) => c.name);
     if (ok.length === 0) throw new Error('Couldn’t download any price history.');
 
     Object.assign(backtest, { status: 'computing', done: 0, total: ok.length });

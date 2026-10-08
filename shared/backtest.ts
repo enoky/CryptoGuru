@@ -6,7 +6,7 @@ import {
   dirOf,
   GROUPS,
   THRESHOLDS,
-  type Confidence,
+  type Agreement,
   type GroupKey,
   type Metrics,
   type SignalContext,
@@ -33,7 +33,7 @@ export interface Reading {
   metrics: Metrics;
   signals: Checks['signals'];
   label: SignalLabel | null;
-  confidence: Confidence | null;
+  agreement: Agreement | null;
   /** Return over the next 7 / 30 days, as a fraction; null near the end of the data. */
   returns: Record<Horizon, number | null>;
 }
@@ -120,7 +120,7 @@ export function readings(
     const combined = combine(signals, metrics);
     const returns = {} as Record<Horizon, number | null>;
     for (const h of HORIZONS) returns[h] = i + h < daily.length ? daily[i + h].c / day.c - 1 : null;
-    out.push({ t: day.t, metrics, signals, label: combined?.label ?? null, confidence: combined?.confidence ?? null, returns });
+    out.push({ t: day.t, metrics, signals, label: combined?.label ?? null, agreement: combined?.agreement ?? null, returns });
   }
   return out;
 }
@@ -149,15 +149,15 @@ function add(t: Tally, r: number) {
 }
 
 export const LABELS: SignalLabel[] = ['Strong bullish signals', 'Leaning bullish', 'Mixed / neutral', 'Leaning bearish', 'Strong bearish signals'];
-export const CONFIDENCES: Confidence[] = ['High', 'Medium', 'Low'];
+export const AGREEMENTS: Agreement[] = ['High', 'Medium', 'Low'];
 
 export interface HorizonResult {
   /** Every evaluated coin-day: the yardstick for everything else. */
   baseline: Tally;
   groups: Record<GroupKey, { bullish: Tally; bearish: Tally; neutral: Tally }>;
   labels: Record<SignalLabel, Tally>;
-  /** Bullish and bearish ratings by confidence: does High really mean more often right? */
-  calls: Record<Confidence, Hits>;
+  /** Bullish and bearish ratings by agreement: were ratings the checks agreed on more often right? */
+  calls: Record<Agreement, Hits>;
 }
 
 export interface BacktestResult {
@@ -173,7 +173,7 @@ export function emptyHorizon(): HorizonResult {
   const labels = {} as HorizonResult['labels'];
   for (const l of LABELS) labels[l] = emptyTally();
   const calls = {} as HorizonResult['calls'];
-  for (const c of CONFIDENCES) calls[c] = { n: 0, right: 0 };
+  for (const c of AGREEMENTS) calls[c] = { n: 0, right: 0 };
   return { baseline: emptyTally(), groups, labels, calls };
 }
 
@@ -203,8 +203,8 @@ export function tally(result: BacktestResult, coinId: string, rs: Reading[]): Ba
       if (r.label) {
         add(hr.labels[r.label], ret);
         const dir = toneOfLabel(r.label);
-        if (dir !== 0 && r.confidence) {
-          const c = hr.calls[r.confidence];
+        if (dir !== 0 && r.agreement) {
+          const c = hr.calls[r.agreement];
           c.n++;
           if (Math.sign(ret) === dir) c.right++;
         }
