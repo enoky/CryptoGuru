@@ -81,7 +81,7 @@ npm run deploy
 
 **Nightly API check:** `.github/workflows/contract.yml` runs every night (or from the Actions tab) and opens an issue labelled `api-contract` if an API changes. Add `COINGECKO_DEMO_KEY` as a repository secret so it uses your key.
 
-**Signal backtest:** `.github/workflows/backtest.yml` replays the rules on ~1000 days for every coin in the top 100 and compares them with the previous rules and two simple baselines. It runs when `shared/signals.ts` or `shared/backtest.ts` change, monthly, and from the Actions tab; the report is the run's summary.
+**Signal backtest:** `.github/workflows/backtest.yml` replays the rules on ~1000 days for every coin in the top 100 and compares them with the previous rules and two simple baselines. It runs when the rules or the code they compute from change (`shared/signals.ts`, `backtest.ts`, `indicators.ts`, `series.ts`, `candles.ts`), monthly, and from the Actions tab; the report is the run's summary.
 
 **Optional cookieless analytics:** create a site in Cloudflare → Web Analytics, then add its token as a repository *variable* `CF_ANALYTICS_TOKEN` (or set `VITE_CF_ANALYTICS_TOKEN` when building). No cookies or personal data; the About page mentions it automatically when it's on.
 

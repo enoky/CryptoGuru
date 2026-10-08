@@ -7,8 +7,12 @@ name: Signal backtest (all coins)
 on:
   push:
     paths:
+      # The rules and everything they compute from.
       - shared/signals.ts
       - shared/backtest.ts
+      - shared/indicators.ts
+      - shared/series.ts
+      - shared/candles.ts
       - tests/research/**
       - .github/workflows/backtest.yml
   schedule:
