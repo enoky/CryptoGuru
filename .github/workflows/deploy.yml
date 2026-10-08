@@ -29,8 +29,49 @@ jobs:
         env:
           # Optional: a repository *variable* (not secret, it ends up in the page) to turn on cookieless analytics.
           VITE_CF_ANALYTICS_TOKEN: ${{ vars.CF_ANALYTICS_TOKEN }}
-      - if: steps.token.outputs.present == 'true'
-        run: npx wrangler deploy
+      - name: Deploy to Cloudflare
+        id: deploy
+        if: steps.token.outputs.present == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail  # fail the step if wrangler fails, despite the tee
+          npx wrangler deploy 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Give the Worker the CoinGecko key (or remove it if the repository no longer has one)
+        if: steps.token.outputs.present == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          COINGECKO_DEMO_KEY: ${{ secrets.COINGECKO_DEMO_KEY }}
+        run: |
+          if [ -n "$COINGECKO_DEMO_KEY" ]; then
+            printf '%s' "$COINGECKO_DEMO_KEY" | npx wrangler secret put COINGECKO_DEMO_KEY
+          elif npx wrangler secret list --format json | grep -q '"name": *"COINGECKO_DEMO_KEY"'; then
+            # Worker secrets survive deploys: remove the old copy so a removed (maybe revoked) key isn't still sent.
+            echo "No COINGECKO_DEMO_KEY repository secret: removing the Worker's old copy, so it uses CoinGecko's keyless public API."
+            npx wrangler secret delete COINGECKO_DEMO_KEY
+          else
+            echo "No COINGECKO_DEMO_KEY secret: the Worker uses CoinGecko's keyless public API."
+          fi
+      - name: Check the live site
+        if: steps.token.outputs.present == 'true' && steps.deploy.outputs.url != ''
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          # The page must load. The first /api/snapshot call fills the market data,
+          # which can take a few seconds; its result is reported, not required.
+          curl -sf -o /dev/null --retry 3 --retry-delay 5 "$URL/" || { echo "::error::$URL did not load"; exit 1; }
+          snapshot=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$URL/api/snapshot")
+          health=$(curl -s --max-time 30 "$URL/api/health")
+          {
+            echo "### Deployed: $URL"
+            echo ""
+            echo "- Page: loads"
+            echo "- \`/api/snapshot\`: HTTP $snapshot"
+            echo "- \`/api/health\`: \`$health\`"
+            echo ""
+            echo "Signals fill in over the first ~2 hours as coins are rated in batches."
+          } >> "$GITHUB_STEP_SUMMARY"
