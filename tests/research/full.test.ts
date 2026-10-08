@@ -15,6 +15,7 @@ import * as coingecko from '../../shared/sources/coingecko';
 import { fetchFearGreedHistory } from '../../shared/sources/feargreed';
 import type { Candle } from '../../shared/types';
 import { addGroupHits, compare, toMarkdown } from './compare';
+import { fundingHistory } from './funding';
 import { fullHistory } from './history';
 
 it('backtests every rated coin', async () => {
@@ -40,8 +41,21 @@ it('backtests every rated coin', async () => {
   const coins = downloaded.filter((c) => !hasPeggedPrice(c.candles));
   const peggedIds = new Set(downloaded.filter((c) => hasPeggedPrice(c.candles)).map((c) => c.id));
   const pegged = assets.filter((a) => peggedIds.has(a.id)).map((a) => a.name);
+  // Futures funding from Binance's archive, from each coin's first spot candle (months before a contract existed answer 404).
+  const symbolOf = new Map(assets.map((a) => [a.id, a.symbol]));
+  const funding = new Map<string, Map<number, number>>();
+  let nextF = 0;
+  const fundingLane = async () => {
+    while (nextF < coins.length) {
+      const c = coins[nextF++];
+      const f = await fundingHistory(fetch, symbolOf.get(c.id)!, c.candles[0].t, now).catch(() => null);
+      if (f) funding.set(c.id, f);
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, fundingLane));
+
   const market = marketHistory(coins);
-  const inputs = coins.map((c) => ({ id: c.id, candles: c.candles, readings: readings(c.id, c.candles, market, fearGreed) }));
+  const inputs = coins.map((c) => ({ id: c.id, candles: c.candles, readings: readings(c.id, c.candles, market, fearGreed), funding: funding.get(c.id) }));
   const tested = new Set(inputs.filter((c) => c.readings.length).map((c) => c.id));
   const missing = assets.filter((a) => !tested.has(a.id) && !peggedIds.has(a.id)).map((a) => a.name);
 
@@ -50,4 +64,6 @@ it('backtests every rated coin', async () => {
   writeFileSync(process.env.BACKTEST_REPORT || 'backtest-report.md', report);
   console.log(report);
   expect(tested.size).toBeGreaterThanOrEqual(30);
+  // Guard against the archive silently failing: most large coins have perpetual contracts.
+  expect(funding.size).toBeGreaterThanOrEqual(20);
 }, 900_000);

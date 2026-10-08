@@ -15,8 +15,22 @@ export const TUNING_END_YEAR = 2022;
 export const MIN_COINS = 10;
 export const CHOPPY_LEVELS = [0.1, 0.15, 0.2, 0.25, 0.3] as const;
 export const STRICT_LEVELS = [25, 30, 40] as const;
+/**
+ * Funding thresholds, per funding period (usually 8 hours): above `high` the
+ * longs are crowded, below `low` the shorts are. Binance's resting rate is
+ * 0.01%, so `high` starts at twice that.
+ */
+export const FUNDING_LEVELS = [
+  { high: 0.0002, low: 0 },
+  { high: 0.0003, low: 0 },
+  { high: 0.0005, low: 0 },
+  { high: 0.0003, low: -0.0001 },
+] as const;
+const fundingName = (f: { high: number; low: number }) => `above ${(f.high * 100).toFixed(2)}% / below ${(f.low * 100).toFixed(2)}%`;
 
 type Dir = 1 | 0 | -1;
+export type Candidates = 'choppy' | 'strict' | 'rank' | 'funding' | 'fundingFilter';
+export const CANDIDATES: Candidates[] = ['choppy', 'strict', 'rank', 'funding', 'fundingFilter'];
 
 /** What is known about the market on one day, from data up to that day (plus forward returns, for scoring only). */
 export interface MarketDay {
@@ -37,12 +51,14 @@ export interface CoinDay {
   r: Reading;
   /** 30-day return, %, from the coin's own candles. */
   ret30: number | null;
+  /** Average perpetual-futures funding rate over the last 7 days (per 8-hour period), when the coin had a contract. */
+  funding7: number | null;
 }
 
 export interface Rule {
   key: string;
   name: string;
-  family: 'baseline' | 'choppy' | 'strict' | 'rank';
+  family: 'baseline' | Candidates;
   dir: (d: CoinDay, m: MarketDay | undefined) => Dir | null;
 }
 
@@ -74,7 +90,41 @@ export const RULES: Rule[] = [
       dir: (d, m) => m?.ranks[k].get(d.id) ?? null,
     }),
   ),
+  // Step 5: against the crowd. Crowded longs (high funding) read as down, crowded shorts (negative) as up.
+  ...FUNDING_LEVELS.map(
+    (f, i): Rule => ({
+      key: `funding${i}`,
+      name: `Funding against the crowd, ${fundingName(f)}`,
+      family: 'funding',
+      dir: (d) => (d.funding7 == null ? null : d.funding7 > f.high ? -1 : d.funding7 < f.low ? 1 : 0),
+    }),
+  ),
+  // Step 5: the current rules, but no call when the crowd is already leaning the same way.
+  ...FUNDING_LEVELS.map(
+    (f, i): Rule => ({
+      key: `fundingFilter${i}`,
+      name: `Current, neutral when funding is crowded the same way (${fundingName(f)})`,
+      family: 'fundingFilter',
+      dir: (d) => {
+        const base = labelDir(d.r.label);
+        if (d.funding7 == null || base == null) return base;
+        return (base === 1 && d.funding7 > f.high) || (base === -1 && d.funding7 < f.low) ? 0 : base;
+      },
+    }),
+  ),
 ];
+
+/** Average of the last 7 days' funding up to day `d`, from at least 5 of them. */
+export function funding7(daily: Map<number, number> | undefined, d: number): number | null {
+  if (!daily) return null;
+  let s = 0;
+  let n = 0;
+  for (let k = d - 6; k <= d; k++) {
+    const v = daily.get(k);
+    if (v != null) (s += v), n++;
+  }
+  return n >= 5 ? s / n : null;
+}
 
 export interface Stats {
   days: number;
@@ -117,6 +167,8 @@ export interface CoinInput {
   id: string;
   candles: Candle[];
   readings: Reading[];
+  /** Daily average funding rate by day key, for coins with a perpetual contract. */
+  funding?: Map<number, number>;
 }
 
 export function prepare(coins: CoinInput[]): { days: Map<number, CoinDay[]>; market: Map<number, MarketDay> } {
@@ -129,7 +181,7 @@ export function prepare(coins: CoinInput[]): { days: Map<number, CoinDay[]>; mar
       const now = closeByDay.get(d);
       const ret30 = then && now ? (now / then - 1) * 100 : null;
       const list = days.get(d) ?? [];
-      list.push({ id: c.id, r, ret30 });
+      list.push({ id: c.id, r, ret30, funding7: funding7(c.funding, d) });
       days.set(d, list);
     }
   }
@@ -176,7 +228,9 @@ export interface Comparison {
   /** Current rules' up/down calls by agreement: horizon → bucket → level → hits. */
   agreement: Record<Horizon, Record<Bucket, Record<string, { n: number; right: number }>>>;
   /** For each candidate family, the setting picked on the tuning years. */
-  picked: Record<'choppy' | 'strict' | 'rank', string>;
+  picked: Record<Candidates, string>;
+  /** Scored coin-days, and how many had funding data, per split. */
+  fundingCoverage: Record<'tuning' | 'heldout', { days: number; withFunding: number }>;
   /** Current rules' groups, held-out 30 days: share of up readings that beat the market, down that lagged (see addGroupHits). */
   groupHits?: Record<string, { bull: string; bear: string }>;
 }
@@ -195,7 +249,8 @@ export function compare(coins: CoinInput[], missing: string[] = [], pegged: stri
     years: [],
     stats: {},
     agreement: { 7: {}, 30: {} },
-    picked: { choppy: '', strict: '', rank: '' },
+    picked: { choppy: '', strict: '', rank: '', funding: '', fundingFilter: '' },
+    fundingCoverage: { tuning: { days: 0, withFunding: 0 }, heldout: { days: 0, withFunding: 0 } },
   };
   const at = (rule: string, h: Horizon, b: Bucket) => {
     const byH = (out.stats[rule] ??= { 7: {}, 30: {} } as Record<Horizon, Record<Bucket, Stats>>);
@@ -213,6 +268,11 @@ export function compare(coins: CoinInput[], missing: string[] = [], pegged: stri
     const phase = m?.btcAbove200 == null ? null : m.btcAbove200 ? 'up' : 'down';
     const buckets: Bucket[] = [year, split, ...(phase ? [`${split}-${phase}`] : [])];
     for (const x of list) {
+      if (x.r.returns[30] != null && m?.forward[30] != null) {
+        const cov = out.fundingCoverage[split];
+        cov.days++;
+        if (x.funding7 != null) cov.withFunding++;
+      }
       for (const h of HORIZONS) {
         const ret = x.r.returns[h];
         const mkt = m?.forward[h];
@@ -256,7 +316,7 @@ export function compare(coins: CoinInput[], missing: string[] = [], pegged: stri
   }
   out.years = [...years].sort();
   const tuningYears = out.years.filter(isTuning);
-  for (const family of ['choppy', 'strict', 'rank'] as const) {
+  for (const family of CANDIDATES) {
     const metric = family === 'rank' ? relSpread : spread;
     let best = { key: '', value: -Infinity };
     for (const rule of RULES.filter((r) => r.family === family)) {
@@ -298,7 +358,7 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
     '',
   );
   L.push(
-    'Every coin-day replays the rules on data up to that day only. **Spread** is the average return after uptrend calls minus after downtrend calls, in percentage points: above 0 means the calls told better periods from worse ones. It is averaged **year by year**, so each market counts equally. **Against the market** measures each return minus the average of all coins that day, which removes the whole market rising or falling. Candidate settings (choppy-market filter, stricter bands, ranking) were picked on the tuning years only; the held-out years are the test.',
+    'Every coin-day replays the rules on data up to that day only. **Spread** is the average return after uptrend calls minus after downtrend calls, in percentage points: above 0 means the calls told better periods from worse ones. It is averaged **year by year**, so each market counts equally. **Against the market** measures each return minus the average of all coins that day, which removes the whole market rising or falling. Candidate settings (choppy-market filter, stricter bands, ranking, futures funding) were picked on the tuning years only; the held-out years are the test.',
     '',
   );
 
@@ -366,6 +426,26 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
     const metric = r.family === 'rank' ? relSpread : spread;
     const picked = Object.values(c.picked).includes(r.key) ? ' **(picked)**' : '';
     L.push(`| ${r.name}${r.family === 'rank' ? ' (vs market)' : ''}${picked} | ${pts(meanOfYears(c, r.key, 30, tuning, metric))} | ${pts(meanOfYears(c, r.key, 30, held, metric))} |`);
+  }
+  L.push('');
+
+  L.push('## Futures funding (Phase 5, Step 5), next 30 days', '');
+  const cov = (b: 'tuning' | 'heldout') => pct(c.fundingCoverage[b].withFunding, c.fundingCoverage[b].days);
+  L.push(
+    `Funding is the 7-day average rate perpetual-futures longs paid shorts (per 8 hours), from Binance's archive. Coin-days with funding data: ${cov('tuning')} of tuning, ${cov('heldout')} of held-out; the filter rules fall back to the current rules elsewhere.`,
+    '',
+  );
+  L.push(
+    '| Rules | Spread, tuning | Spread, held-out | Held-out years positive | Spread vs market, held-out | Calls, held-out |',
+    '|---|---|---|---|---|---|',
+  );
+  for (const key of ['current', ...RULES.filter((r) => r.family === 'funding' || r.family === 'fundingFilter').map((r) => r.key)]) {
+    const s = c.stats[key]?.[30].heldout ?? emptyStats();
+    const [pos, of] = positiveYears(c, key, 30, held, spread);
+    const picked = Object.values(c.picked).includes(key) ? ' **(picked)**' : '';
+    L.push(
+      `| ${nameOf(key)}${picked} | ${pts(meanOfYears(c, key, 30, tuning, spread))} | ${pts(meanOfYears(c, key, 30, held, spread))} | ${of ? `${pos} of ${of}` : '—'} | ${pts(meanOfYears(c, key, 30, held, relSpread))} | ${pct(s.calls, s.days)} of days |`,
+    );
   }
   L.push('');
 
