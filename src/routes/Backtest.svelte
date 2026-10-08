@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { avgReturn, AGREEMENTS, HORIZONS, LABELS, pctFell, pctRight, pctRose, type Horizon, type Tally } from '../../shared/backtest';
+  import { avgReturn, AGREEMENTS, HORIZONS, LABELS, pctFell, pctRight, pctRose, type Detail, type Horizon, type Tally } from '../../shared/backtest';
   import { GROUPS, toneOf } from '../../shared/signals';
   import HitBar from '../components/HitBar.svelte';
   import ErrorInline from '../components/ErrorInline.svelte';
@@ -34,11 +34,32 @@
     return a == null ? '—' : formatPct(a, 1);
   };
 
+  const anyDetail = $derived(r?.details?.Any ?? null);
+  /** Whether a rating's average stood clear of any day's: only when the two 90% ranges don't overlap. */
+  const standing = (d: Detail | undefined) => {
+    if (!d?.range || !anyDetail?.range) return null;
+    if (d.range[0] > anyDetail.range[1]) return 'Its average was clearly above any day’s.';
+    if (d.range[1] < anyDetail.range[0]) return 'Its average was clearly below any day’s.';
+    return 'Its average was within chance of any day’s.';
+  };
+
   function chooseHorizon(h: Horizon) {
     horizon = h;
     lsSet('backtest:horizon', h);
   }
 </script>
+
+{#snippet detail(d: Detail | undefined)}
+  {#if d}
+    <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm tabular-nums">
+      <dt class="text-muted">Typical (median)</dt><dd>{formatPct(d.median, 1)}</dd>
+      <dt class="text-muted">When it rose</dt><dd>{formatPct(d.avgRose, 1)}</dd>
+      <dt class="text-muted">When it fell</dt><dd>{formatPct(d.avgFell, 1)}</dd>
+      <dt class="text-muted">Worst</dt><dd>{formatPct(d.worst, 0)}</dd>
+      {#if d.range}<dt class="text-muted">Average, 90% range</dt><dd>{formatPct(d.range[0], 1)} to {formatPct(d.range[1], 1)}</dd>{/if}
+    </dl>
+  {/if}
+{/snippet}
 
 <div class="flex items-center gap-2">
   <button type="button" class="-ml-2 grid size-11 shrink-0 place-items-center rounded-full hover:bg-surface-2" onclick={() => back('#/signals')} aria-label="Back">
@@ -80,8 +101,11 @@
     <p class="mt-1 text-[15px]">
       On any day, the price was <strong>higher {horizon} days later {pct0(baseRose)}</strong> of the time (average change {avg(r.baseline)}).
     </p>
+    {@render detail(r.details?.Any)}
     <p class="mt-2 text-sm text-muted">
       A rating only tells you something about what comes next if it beats this. In a mostly rising market almost every uptrend looks “right”.
+      The 90% range shows how much the average could move with a different handful of months: a rating stands out only when its
+      range sits clear of this one.
     </p>
   </section>
 
@@ -103,6 +127,8 @@
             </p>
             <HitBar pct={pct ?? 0} baseline={tone === 'down' ? baseFell : baseRose} {tone} />
             <p class="mt-1 text-xs text-muted">{vsBase(pct, tone === 'down' ? baseFell : baseRose)}</p>
+            {@render detail(r.details?.[label])}
+            {#if standing(r.details?.[label])}<p class="mt-1 text-xs text-muted">{standing(r.details?.[label])}</p>{/if}
           {:else}
             <p class="text-sm text-muted">Didn’t occur in this period.</p>
           {/if}

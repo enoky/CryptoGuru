@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addDetails,
   avgReturn,
   completedDays,
   contextFor,
@@ -7,6 +8,7 @@ import {
   DAY,
   dayKey,
   emptyResult,
+  emptySamples,
   marketHistory,
   pctFell,
   pctRight,
@@ -144,6 +146,33 @@ describe('tally', () => {
     expect(res.coins).toEqual(['a', 'b']);
     expect(res.from).toBe(a[WARMUP_DAYS - 1].t);
     expect(res.horizons[7].baseline.n).toBe(300 - WARMUP_DAYS + 1 - 7 + (320 - WARMUP_DAYS + 1 - 7));
+  });
+
+  it('details each rating: median, average win and loss, worst case and a range for the average', () => {
+    const at = (m: number, d: number) => Date.UTC(2024, m, 1 + d);
+    const rs = [0.1, -0.2, 0.3, 0.05, -0.1, 0.2].map((ret, i) => ({
+      t: at(i % 3, i),
+      metrics: {} as never,
+      signals: {} as never,
+      label: 'Uptrend' as const,
+      score: 30,
+      agreement: 'High' as const,
+      returns: { 7: ret, 30: null },
+    }));
+    const samples = emptySamples();
+    const res = addDetails(tally(emptyResult(), 'x', rs, samples), samples);
+    const d = res.horizons[7].details.Uptrend!;
+    expect(d.median).toBeCloseTo(7.5, 10);
+    expect(d.avgRose).toBeCloseTo(16.25, 10);
+    expect(d.avgFell).toBeCloseTo(-15, 10);
+    expect(d.worst).toBeCloseTo(-20, 10);
+    // Three months, so a range; it brackets the average (+5.83%).
+    expect(d.range![0]).toBeLessThan(5.84);
+    expect(d.range![1]).toBeGreaterThan(5.83);
+    expect(res.horizons[7].details.Any).toEqual(d);
+    // No 30-day returns, no 30-day detail; without samples, no detail at all.
+    expect(res.horizons[30].details).toEqual({});
+    expect(tally(emptyResult(), 'x', rs).horizons[7].details).toEqual({});
   });
 
   it('skips coins with too little history', () => {

@@ -325,6 +325,10 @@ test('backtest shows how often signals were right, against the any-day yardstick
   await expect(yardstick).toContainText(/higher 30 days later \d+%/, { timeout: 20_000 });
   const ratings = page.getByRole('region', { name: 'Overall ratings' }).getByRole('listitem');
   await expect(ratings).toHaveCount(5);
+  // Each rating, and the yardstick, in detail.
+  await expect(yardstick).toContainText('Typical (median)');
+  await expect(yardstick).toContainText('Average, 90% range');
+  await expect(ratings.filter({ hasText: 'Typical (median)' }).first()).toBeVisible();
   await expect(page.getByRole('region', { name: 'Each check' }).getByRole('listitem')).toHaveCount(4);
   await expect(page.getByRole('region', { name: 'Were ratings right more often when the checks agreed?' }).getByRole('listitem')).toHaveCount(3);
   await expect(page.getByText(/\d+ coins · /)).toContainText('20 coins'); // the 20 largest after skipping Tether

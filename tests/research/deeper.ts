@@ -1,5 +1,8 @@
 import { GROUPS, toneOf, type GroupKey, type SignalLabel } from '../../shared/signals';
+import { bootstrap, median } from '../../shared/stats';
 import { prepare, TUNING_END_YEAR, type CoinDay, type CoinInput } from './compare';
+
+export { bootstrap };
 
 /**
  * Deeper checks on the current rules (PLAN.md §5, Phase 6), all on 30-day
@@ -15,7 +18,6 @@ import { prepare, TUNING_END_YEAR, type CoinDay, type CoinInput } from './compar
 type Dir = 1 | 0 | -1;
 type Split = 'tuning' | 'heldout';
 export const SPLITS: Split[] = ['tuning', 'heldout'];
-export const BOOTSTRAP_ROUNDS = 1000;
 const CUT = 15;
 
 const yearOf = (d: number) => new Date(d * 86_400_000).getUTCFullYear();
@@ -132,40 +134,6 @@ const addSums = (a: Sums, b: Sums) => {
 };
 export const absSpread = (s: Sums) => (s.bn && s.sn ? (s.bs / s.bn - s.ss / s.sn) * 100 : null);
 export const relSpreadOf = (s: Sums) => (s.bn && s.sn ? (s.br / s.bn - s.sr / s.sn) * 100 : null);
-
-/** Deterministic random numbers, so a report can be reproduced. */
-function rng(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** 5th and 95th percentiles of `stat` over block-bootstrap resamples of `blocks`. */
-export function bootstrap<T>(blocks: T[], stat: (sample: T[]) => number | null, rounds = BOOTSTRAP_ROUNDS, seed = 42): [number, number] | null {
-  if (blocks.length < 2) return null;
-  const rand = rng(seed);
-  const vals: number[] = [];
-  for (let r = 0; r < rounds; r++) {
-    const sample = Array.from({ length: blocks.length }, () => blocks[Math.floor(rand() * blocks.length)]);
-    const v = stat(sample);
-    if (v != null && Number.isFinite(v)) vals.push(v);
-  }
-  if (vals.length < rounds / 2) return null;
-  vals.sort((a, b) => a - b);
-  return [vals[Math.floor(vals.length * 0.05)], vals[Math.floor(vals.length * 0.95)]];
-}
-
-const median = (xs: number[]) => {
-  if (!xs.length) return null;
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-};
 
 export interface Deeper {
   /** Live weights and the two fitted sets, as signed shares of Σ|w| (%). */
