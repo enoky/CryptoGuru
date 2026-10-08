@@ -121,7 +121,9 @@ Every layer uses **stale-while-revalidate**: return the cached value immediately
 Each run (a request or a cron firing) may make **50 outbound requests** and use **10 ms of CPU** (time spent waiting on the network doesn't count) ([Cloudflare limits](https://developers.cloudflare.com/workers/platform/limits/)). So:
 - Two cron triggers, each with its own allowance: `*/10` refreshes the snapshot, `5-59/10` rates a batch of coins.
 - Every cron run uses a request budget of 45 and stops early when fewer than 3 remain.
-- Measured locally: the market list without sparklines takes ~1 ms; with sparklines ~4–5 ms (so they are fetched only hourly); a batch of 8 coins with 250 daily candles each takes ~3–7 ms. ⚠ Check CPU time in the Cloudflare dashboard after deploying and lower `BATCH` in `worker/signals.ts` if runs are cut off.
+- Measured locally: the market list without sparklines takes ~1 ms; with sparklines ~4–5 ms (so they are fetched only hourly); a batch of 8 coins with 250 daily candles each takes ~3–7 ms.
+- **Measured live (Cloudflare dashboard, Oct 7–8 2026, first day after deploying):** CPU per run P50 10.9 ms, P90 26.1 ms, P99 31.9 ms, peaks around 64 ms, so many runs go over the nominal 10 ms. The heaviest stretch was the first night, when every coin was due at once; after that, P50 settled around 3–5 ms with P90 still 15–25 ms (most likely the 8-coin signal batches). **No run was stopped:** "Exceeded CPU Time Limits" and every other error count were 0, and `/api/health` showed full batches finishing (32 coins rated four runs after a ratings reset, `stale` 0). Cloudflare allows some leeway over 10 ms on the free plan, but it isn't guaranteed.
+- **Decision:** keep `BATCH` at 8. If "Exceeded CPU Time Limits" ever shows above 0, or `stale` / `lastRunSecondsAgo` (> 600) show batches not finishing, halve it to 4 and raise `SIGNAL_REFRESH_MS` to 4 hours (daily-candle signals barely change in that time). There's no CPU headroom for new work in the Worker.
 
 If KV or Worker limits are hit, the app automatically switches to its browser-direct fallback.
 
@@ -234,7 +236,7 @@ The goal is a rating that is **honest and calibrated**, not one that "predicts" 
 
 **Step 4: futures data (moved to Phase 5, Step 5) ⚠ verify before build**
 - **Funding rate and open interest** from a public futures API (Binance `fapi/v1/premiumIndex` returns every symbol in one request; Bybit and OKX have equivalents). Very high positive funding means a crowded leveraged long; it would be a caution. Strongly negative funding reads as crowded shorts.
-- Waits on the Worker CPU check: parsing every symbol's funding on each snapshot run adds CPU to the heavier cron. Binance futures also blocks US IP addresses; check from the Worker first and fall back to Bybit or OKX. Budget: 1 request per snapshot run.
+- Not in the Worker: the CPU check (§4) left no headroom for parsing every symbol's funding on each snapshot run. Binance futures also blocks US IP addresses; check from the Worker first and fall back to Bybit or OKX. Budget: 1 request per snapshot run.
 
 **Considered and not planned**
 - **Stablecoin supply growth and DeFi TVL** (DefiLlama free API): reasonable market-wide context, but it adds a source for a small gain.
@@ -244,7 +246,7 @@ The goal is a rating that is **honest and calibrated**, not one that "predicts" 
 - **Machine learning:** not transparent, and overfits easily on a few years of daily data.
 - **Tuning thresholds to the backtest:** with about two market regimes of history, it would mostly fit noise.
 
-**Constraints:** new inputs must fit the free plan's 50 requests and 10 ms of CPU per Worker run. Fewer, tested checks beat many tuned ones, and every threshold is documented in `shared/signals.ts`.
+**Constraints:** new inputs must fit the free plan's 50 requests and 10 ms of CPU per Worker run (live runs already use more and rely on Cloudflare's leeway: §4). Fewer, tested checks beat many tuned ones, and every threshold is documented in `shared/signals.ts`.
 
 ### Phase 5: accuracy (Step 1 built; Steps 2–4 tested and not shipped)
 
@@ -272,9 +274,9 @@ The goal: get from "barely better than chance" to a **modest, measurable edge**,
 **Step 4: fewer, stronger calls**
 - Test raising the *Leaning* bands (±15 today) to ±25 or ±30 so only clear cases get a bullish or bearish label. More coins will read *Mixed*; that's the honest answer for them.
 
-**Step 5: futures positioning (was Phase 4, Step 4) ⚠ verify before build**
-- Funding rate and open interest show when leveraged traders are crowded on one side, which often comes before sharp reversals. The only candidate that adds information beyond the price chart.
-- Waits on the Worker CPU check (it adds a large JSON parse to the snapshot run), and needs checking that the futures APIs answer from Cloudflare (Binance futures blocks US IP addresses; Bybit and OKX as fallbacks). Shown as context and a caution first; scored only if the backtest supports it (futures history: Binance `fundingRate` endpoint, back to 2019).
+**Step 5: futures positioning (was Phase 4, Step 4): not in the Worker**
+- Funding rate and open interest show when leveraged traders are crowded on one side, which often comes before sharp reversals: the only candidate that adds information beyond the price chart.
+- **Decided after the CPU check (§4):** live runs already go well past the nominal 10 ms (P90 26 ms) without being stopped, so a large funding-rate parse on every snapshot run is not worth the risk on the free plan. If it's tried, it belongs in the GitHub backtest first (Binance `fundingRate` history back to 2019 ⚠ verify), and only if it beats the current rules on held-out years would it be worth finding CPU for (for example a separate cron run once an hour, or a paid plan).
 
 **Not planned:** more indicators built from the same prices (Bollinger bands, stochastics: they repeat the checks we have); tuning until the backtest looks good; machine learning (overfits, and ratings could no longer be explained).
 
@@ -297,7 +299,7 @@ The goal: get from "barely better than chance" to a **modest, measurable edge**,
 - **Against the market:** any coin beat the equal-weighted average only 37.8% of the time (a few big winners pull it up). Down-pointing checks "lagged" 62% of the time, which is that base rate, not skill. Up-pointing checks beat it about 2 points more often than any coin, RSI dips in an uptrend about 11 points more (49.3%): worth watching, not proof.
 - **Agreement:** unrelated to being right (held-out: High 44.8%, Low 48.3%).
 - **Decision:** the labels now describe instead of forecast. *Strong bullish signals / Leaning bullish / Mixed / Leaning bearish / Strong bearish signals* became **Strong uptrend / Uptrend / No clear trend / Downtrend / Strong downtrend**; explanations no longer claim what "has often" happened next; the About page says the ratings summarise the recent past and that backtests since 2019 found them no reliable guide to the next month. The signals document moved to format version 3, so ratings are rebuilt over about 2 hours after deploying.
-- **Step 5 (futures positioning)** is still untested and waits on the Worker CPU check.
+- **Step 5 (futures positioning):** after the CPU check, not added to the Worker; it can be tried in the backtest first (see Step 5 above).
 
 ---
 
@@ -470,7 +472,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`; the nightly contract check has passed against all live APIs.
 
 - Phase 4: Steps 1–3 built (157 unit tests, 112 browser tests). All-coins backtest: the new rules match the old ones and beat both baselines on the newer half; agreement between the checks predicts being right only weakly at best, so "confidence" is now "agreement"; pegged assets are found by how little their price moves. See §5 *Phase 4*. Futures funding moved to Phase 5.
-- Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 waits on the CPU check. See §5 *Phase 5*.
+- Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 (futures) stays out of the Worker after the CPU check. See §5 *Phase 5*.
 
 ---
 
@@ -481,6 +483,7 @@ Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`
 | CoinGecko changes free-tier limits or terms ⚠ | Rankings and metadata stop updating | Cron-only usage with a fixed budget; CoinPaprika fallback; adapters keep sources swappable |
 | Binance mirror blocked or geo-restricted for Worker IPs ⚠ | Live prices and candles fall back to slower sources | Ordered failover to CoinGecko and Kraken; health endpoint alerts |
 | Cloudflare KV write limit (1k/day) or Worker limit (100k req/day) reached ⚠ | Stale snapshot or API errors | Low write budget (~240/day); traffic beyond the limit triggers browser-direct fallback; consider the paid tier only if traffic justifies it |
+| Worker CPU over the free plan's 10 ms per run (measured P50 10.9 ms, P90 26 ms) ⚠ | Cloudflare could start stopping runs: signal batches unfinished, ratings going stale | No errors so far (0 "Exceeded CPU"); watch the Errors chart and `/api/health` (`stale`, `lastRunSecondsAgo`); fix ready: `BATCH` 8 → 4 and a 4-hour refresh |
 | Users treat signals as advice | Legal and reputational risk; user losses | Neutral wording, no buy/sell language, disclaimer on every rating, published limitations and backtest |
 | Wrong or manipulated data from one source | Misleading prices or signals | Schema validation, sanity bounds, cross-source check for large moves |
 | Symbol collisions (same ticker for different coins) | Wrong candles for a coin | Map by CoinGecko ID → explicit Binance pair table; never match by ticker alone |
