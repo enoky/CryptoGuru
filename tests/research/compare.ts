@@ -320,6 +320,11 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
     '| Rules | Spread vs market, tuning | Spread vs market, held-out | Held-out years positive | Bullish beat the market (held-out) | Bearish lagged it (held-out) |',
     '|---|---|---|---|---|---|',
   );
+  {
+    // The yardstick: most coins trail the average, because a few big winners pull it up.
+    const any = c.stats.always?.[30].heldout ?? emptyStats();
+    L.push(`| Any coin (yardstick) | — | — | — | ${pct(any.bull.beat, any.bull.n)} | ${pct(any.bull.n - any.bull.beat, any.bull.n)} |`);
+  }
   for (const key of [...main, ...ranks]) {
     const s = c.stats[key]?.[30].heldout ?? emptyStats();
     const [pos, of] = positiveYears(c, key, 30, held, relSpread);
@@ -339,8 +344,9 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
       const s = c.stats[k]?.[30][y];
       return pts(s ? (c.picked.rank === k ? relSpread(s) : spread(s)) : null);
     });
-    L.push(`| ${y}${isTuning(y) ? '' : ' (held-out)'} | ${cells.join(' | ')} | ${pts(avgMkt)}% |`);
+    L.push(`| ${y}${isTuning(y) ? '' : ' (held-out)'} | ${cells.join(' | ')} | ${avgMkt == null ? '—' : `${pts(avgMkt)}%`} |`);
   }
+  L.push('', `A year shows — when fewer than ${MIN_COINS} of today's coins had 200 days of Binance history, so there's no market average to score against.`);
   L.push('', `The ranking column (${nameOf(c.picked.rank)}) is measured against the market; the others up or down.`, '');
 
   L.push('## By market phase: spread, next 30 days', '');
