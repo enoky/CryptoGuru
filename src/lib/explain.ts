@@ -68,8 +68,8 @@ export function explainGroup(key: GroupKey, s: Pick<CoinSignal, 'metrics' | 'sig
       }
       const gap = `${Math.abs(m.return90d - m.btcReturn90d).toFixed(0)} percentage points`;
       const both = `Over ${T.strengthDays} days this coin moved ${signed(m.return90d)} and Bitcoin ${signed(m.btcReturn90d)}`;
-      if (v > 0) return `${both}: it has ${howMuch(v)}outperformed Bitcoin by ${gap}. Coins that lead the market have often kept leading for a while.${widened(m)}`;
-      if (v < 0) return `${both}: it has ${howMuch(v)}lagged Bitcoin by ${gap}. Coins that lag the market have often kept lagging for a while.${widened(m)}`;
+      if (v > 0) return `${both}: it has ${howMuch(v)}outperformed Bitcoin by ${gap}.${widened(m)}`;
+      if (v < 0) return `${both}: it has ${howMuch(v)}lagged Bitcoin by ${gap}.${widened(m)}`;
       return `${both}: about the same, so neither leading nor lagging.`;
     }
     case 'rsi': {
@@ -79,18 +79,18 @@ export function explainGroup(key: GroupKey, s: Pick<CoinSignal, 'metrics' | 'sig
       if (m.rsi < T.rsiOversold) {
         if (v > 0) {
           return longTrend > 0
-            ? `RSI is ${r}: oversold while the long-term trend is up. Sharp dips in an uptrend have often bounced.`
-            : `RSI is ${r}: below ${T.rsiOversold}, usually read as oversold. With no clear long-term trend, prices that fell this fast have often bounced.`;
+            ? `RSI is ${r}: oversold, a sharp dip within a long-term uptrend.`
+            : `RSI is ${r}: below ${T.rsiOversold}, usually read as oversold: the price has fallen fast, with no clear long-term trend.`;
         }
-        return `RSI is ${r}: oversold, but in a long-term downtrend, where prices that fall fast often keep falling. Not counted either way.`;
+        return `RSI is ${r}: oversold, but in a long-term downtrend, so the fast fall fits the trend. Not counted either way.`;
       }
       if (m.rsi > T.rsiOverbought) {
         if (v < 0) {
           return longTrend < 0
-            ? `RSI is ${r}: overbought while the long-term trend is down. Sharp rallies in a downtrend have often faded.`
-            : `RSI is ${r}: above ${T.rsiOverbought}, usually read as overbought. With no clear long-term trend, prices that rose this fast have often cooled off.`;
+            ? `RSI is ${r}: overbought, a sharp rally within a long-term downtrend.`
+            : `RSI is ${r}: above ${T.rsiOverbought}, usually read as overbought: the price has risen fast, with no clear long-term trend.`;
         }
-        return `RSI is ${r}: overbought, but in a long-term uptrend, where strong momentum often continues. Not counted either way.`;
+        return `RSI is ${r}: overbought, but in a long-term uptrend, so the fast rise fits the trend. Not counted either way.`;
       }
       return `RSI is ${r}: neither overbought nor oversold.`;
     }
@@ -156,22 +156,22 @@ export function explainCaution(a: Caution, m: Metrics): string {
     case 'thin':
       return `Thinly traded (24h volume under ${T.thinTurnover}% of market value), so prices are easier to push around.`;
     case 'greed':
-      return `The market is in extreme greed (Fear & Greed ${m.fearGreed}): when the crowd is already this optimistic, bullish signals have often disappointed.`;
+      return `The market is in extreme greed (Fear & Greed ${m.fearGreed}): an uptrend in a market this optimistic is more fragile.`;
     case 'fear':
-      return `The market is in extreme fear (Fear & Greed ${m.fearGreed}): when the crowd is already this gloomy, bearish signals have often disappointed.`;
+      return `The market is in extreme fear (Fear & Greed ${m.fearGreed}): a downtrend in a market this gloomy can turn sharply.`;
     case 'weakMarket':
-      return `Only ${m.breadth}% of coins are above their 200-day average: a bullish reading is going against most of the market.`;
+      return `Only ${m.breadth}% of coins are above their 200-day average: this uptrend is going against most of the market.`;
     case 'strongMarket':
-      return `${m.breadth}% of coins are above their 200-day average: a bearish reading is going against most of the market.`;
+      return `${m.breadth}% of coins are above their 200-day average: this downtrend is going against most of the market.`;
   }
 }
 
 export const SHORT_LABEL = {
-  'Strong bullish signals': 'Strong bullish',
-  'Leaning bullish': 'Leaning bullish',
-  'Mixed / neutral': 'Mixed',
-  'Leaning bearish': 'Leaning bearish',
-  'Strong bearish signals': 'Strong bearish',
+  'Strong uptrend': 'Strong uptrend',
+  'Uptrend': 'Uptrend',
+  'No clear trend': 'No trend',
+  'Downtrend': 'Downtrend',
+  'Strong downtrend': 'Strong downtrend',
 } as const;
 
 export const formatScore = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : '0');

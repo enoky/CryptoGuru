@@ -1,5 +1,5 @@
 import { AGREEMENTS, dayKey, HORIZONS, type Horizon, type Reading } from '../../shared/backtest';
-import { BTC_ID, GROUPS, dirOf, type SignalLabel } from '../../shared/signals';
+import { BTC_ID, GROUPS, dirOf, toneOf, type SignalLabel } from '../../shared/signals';
 import type { Candle } from '../../shared/types';
 import { v1Label } from './v1';
 
@@ -46,14 +46,14 @@ export interface Rule {
   dir: (d: CoinDay, m: MarketDay | undefined) => Dir | null;
 }
 
-const labelDir = (l: SignalLabel | null): Dir | null => (l == null ? null : l.includes('bullish') ? 1 : l.includes('bearish') ? -1 : 0);
+const labelDir = (l: SignalLabel | null): Dir | null => (l == null ? null : ({ up: 1, down: -1, neutral: 0 } as const)[toneOf(l)]);
 const scoreDir = (s: number | null, cut: number): Dir | null => (s == null ? null : s >= cut ? 1 : s <= -cut ? -1 : 0);
 
 export const RULES: Rule[] = [
   { key: 'current', name: 'Current rules', family: 'baseline', dir: (d) => labelDir(d.r.label) },
   { key: 'v1', name: 'Rules before Phase 4', family: 'baseline', dir: (d) => labelDir(v1Label(d.r.metrics)) },
   { key: 'momentum', name: '90-day momentum', family: 'baseline', dir: (d) => (d.r.metrics.return90d == null ? null : (Math.sign(d.r.metrics.return90d) as Dir)) },
-  { key: 'always', name: 'Always bullish', family: 'baseline', dir: () => 1 },
+  { key: 'always', name: 'Always up', family: 'baseline', dir: () => 1 },
   ...CHOPPY_LEVELS.map(
     (x): Rule => ({
       key: `choppy${x}`,
@@ -65,7 +65,7 @@ export const RULES: Rule[] = [
       },
     }),
   ),
-  ...STRICT_LEVELS.map((c): Rule => ({ key: `strict${c}`, name: `Current, bullish/bearish only beyond ±${c}`, family: 'strict', dir: (d) => scoreDir(d.r.score, c) })),
+  ...STRICT_LEVELS.map((c): Rule => ({ key: `strict${c}`, name: `Current, uptrend/downtrend only beyond ±${c}`, family: 'strict', dir: (d) => scoreDir(d.r.score, c) })),
   ...RANK_KEYS.map(
     (k): Rule => ({
       key: `rank-${k}`,
@@ -92,7 +92,7 @@ const emptyStats = (): Stats => ({
   bear: { n: 0, sum: 0, fell: 0, rel: 0, lagged: 0 },
 });
 
-/** Average return after bullish calls minus after bearish calls, percentage points; null without both. */
+/** Average return after up calls minus after down calls, percentage points; null without both. */
 export const spread = (s: Stats) => (s.bull.n && s.bear.n ? (s.bull.sum / s.bull.n - s.bear.sum / s.bear.n) * 100 : null);
 /** The same, for returns relative to the market average. */
 export const relSpread = (s: Stats) => (s.bull.n && s.bear.n ? (s.bull.rel / s.bull.n - s.bear.rel / s.bear.n) * 100 : null);
@@ -173,11 +173,11 @@ export interface Comparison {
   years: string[];
   /** rule key → horizon → bucket → stats */
   stats: Record<string, Record<Horizon, Record<Bucket, Stats>>>;
-  /** Current rules' bullish/bearish calls by agreement: horizon → bucket → level → hits. */
+  /** Current rules' up/down calls by agreement: horizon → bucket → level → hits. */
   agreement: Record<Horizon, Record<Bucket, Record<string, { n: number; right: number }>>>;
   /** For each candidate family, the setting picked on the tuning years. */
   picked: Record<'choppy' | 'strict' | 'rank', string>;
-  /** Current rules' groups, held-out 30 days: share of bullish readings that beat the market, bearish that lagged (see addGroupHits). */
+  /** Current rules' groups, held-out 30 days: share of up readings that beat the market, down that lagged (see addGroupHits). */
   groupHits?: Record<string, { bull: string; bear: string }>;
 }
 
@@ -298,7 +298,7 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
     '',
   );
   L.push(
-    'Every coin-day replays the rules on data up to that day only. **Spread** is the average return after bullish calls minus after bearish calls, in percentage points: above 0 means the calls told better periods from worse ones. It is averaged **year by year**, so each market counts equally. **Against the market** measures each return minus the average of all coins that day, which removes the whole market rising or falling. Candidate settings (choppy-market filter, stricter bands, ranking) were picked on the tuning years only; the held-out years are the test.',
+    'Every coin-day replays the rules on data up to that day only. **Spread** is the average return after uptrend calls minus after downtrend calls, in percentage points: above 0 means the calls told better periods from worse ones. It is averaged **year by year**, so each market counts equally. **Against the market** measures each return minus the average of all coins that day, which removes the whole market rising or falling. Candidate settings (choppy-market filter, stricter bands, ranking) were picked on the tuning years only; the held-out years are the test.',
     '',
   );
 
@@ -317,7 +317,7 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
 
   L.push('## Against the market, next 30 days', '');
   L.push(
-    '| Rules | Spread vs market, tuning | Spread vs market, held-out | Held-out years positive | Bullish beat the market (held-out) | Bearish lagged it (held-out) |',
+    '| Rules | Spread vs market, tuning | Spread vs market, held-out | Held-out years positive | Up calls beat the market (held-out) | Down calls lagged it (held-out) |',
     '|---|---|---|---|---|---|',
   );
   {
@@ -381,14 +381,14 @@ export function toMarkdown(c: Comparison, now = Date.now()): string {
   L.push('');
 
   L.push('## Each check (current rules, held-out years, next 30 days)', '');
-  L.push('| Check | When bullish: beat the market | When bearish: lagged it |', '|---|---|---|');
+  L.push('| Check | When up: beat the market | When down: lagged it |', '|---|---|---|');
   for (const g of GROUPS) L.push(`| ${g.name} | ${c.groupHits?.[g.key]?.bull ?? '—'} | ${c.groupHits?.[g.key]?.bear ?? '—'} |`);
   L.push('');
 
   L.push('## Caveats', '');
   L.push(
     '- Neighbouring days overlap (their windows share most days), and the coins move together, so there are far fewer independent results than the counts suggest; a single year is a handful of market moves.',
-    '- Coins are today’s top 100: ones that collapsed and dropped out aren’t included, which flatters bullish calls, more so in the early years.',
+    '- Coins are today’s top 100: ones that collapsed and dropped out aren’t included, which flatters uptrend calls, more so in the early years.',
     '- Early years have fewer coins (Binance listings), so market averages and rankings there are rougher.',
     '- Past liquidity isn’t available. Market breadth is measured over these coins.',
     '- No trading costs, taxes or slippage. Not financial advice.',

@@ -157,14 +157,14 @@ describe('classify: volume', () => {
 describe('labelFor', () => {
   it('uses the documented bands', () => {
     expect([50, 49, 15, 14, -14, -15, -49, -50].map((s) => labelFor(s).label)).toEqual([
-      'Strong bullish signals',
-      'Leaning bullish',
-      'Leaning bullish',
-      'Mixed / neutral',
-      'Mixed / neutral',
-      'Leaning bearish',
-      'Leaning bearish',
-      'Strong bearish signals',
+      'Strong uptrend',
+      'Uptrend',
+      'Uptrend',
+      'No clear trend',
+      'No clear trend',
+      'Downtrend',
+      'Downtrend',
+      'Strong downtrend',
     ]);
   });
 });
@@ -173,8 +173,8 @@ describe('combine', () => {
   it('scores all-bullish as +100 with high agreement', () => {
     expect(combine(groups({ trend: 1, strength: 1, rsi: 1, volume: 1 }), base)).toEqual({
       score: 100,
-      label: 'Strong bullish signals',
-      tone: 'bullish',
+      label: 'Strong uptrend',
+      tone: 'up',
       agreement: 'High',
       cautions: [],
     });
@@ -182,17 +182,17 @@ describe('combine', () => {
 
   it('weights groups and keeps their strength: trend 45 × 0.5 + strength 25 against RSI 15', () => {
     // (22.5 + 25 − 15) / 100 = 32.5 → 33; two of three clear readings agree.
-    expect(combine(groups({ trend: 0.5, strength: 1, rsi: -1 }), base)).toMatchObject({ score: 33, tone: 'bullish', agreement: 'Medium' });
+    expect(combine(groups({ trend: 0.5, strength: 1, rsi: -1 }), base)).toMatchObject({ score: 33, tone: 'up', agreement: 'Medium' });
   });
 
   it('counts neutral checks as not agreeing: 2 of 4 pointing up is Medium', () => {
-    expect(combine(groups({ trend: 1, strength: 1, rsi: 0, volume: 0 }), base)).toMatchObject({ tone: 'bullish', agreement: 'Medium' });
-    expect(combine(groups({ trend: 1, strength: 1, rsi: 0, volume: 1 }), base)).toMatchObject({ tone: 'bullish', agreement: 'High' });
+    expect(combine(groups({ trend: 1, strength: 1, rsi: 0, volume: 0 }), base)).toMatchObject({ tone: 'up', agreement: 'Medium' });
+    expect(combine(groups({ trend: 1, strength: 1, rsi: 0, volume: 1 }), base)).toMatchObject({ tone: 'up', agreement: 'High' });
   });
 
   it('rates agreement Low when fewer than half the checks point the overall way', () => {
     // Trend alone carries the score (45 × 0.6 − 25 × 0.3 − 15 = 4.5 → mixed); for a mixed score, agreement is the share of neutral groups.
-    expect(combine(groups({ trend: 0.6, strength: -0.3, rsi: -1, volume: 0 }), base)).toMatchObject({ label: 'Mixed / neutral', agreement: 'Low' });
+    expect(combine(groups({ trend: 0.6, strength: -0.3, rsi: -1, volume: 0 }), base)).toMatchObject({ label: 'No clear trend', agreement: 'Low' });
   });
 
   it('Fear & Greed never changes the score', () => {
@@ -232,7 +232,7 @@ describe('combine', () => {
   });
 
   it('rates a mostly-neutral picture as mixed with high agreement', () => {
-    expect(combine(groups({}), base)).toMatchObject({ score: 0, label: 'Mixed / neutral', agreement: 'High' });
+    expect(combine(groups({}), base)).toMatchObject({ score: 0, label: 'No clear trend', agreement: 'High' });
   });
 });
 
@@ -246,7 +246,7 @@ describe('computeMetrics / computeSignal', () => {
     expect(s.trendParts.cross).toBe(1);
     expect(s.signals.strength).toBeGreaterThan(0.5);
     expect(s.signals.volume).toBe(1);
-    expect(s.tone).toBe('bullish');
+    expect(s.tone).toBe('up');
     expect(s.metrics.days).toBe(365);
     expect(s.metrics.return90d).toBeCloseTo((1.004 ** 90 - 1) * 100, 0);
     expect(s.metrics.turnover).toBe(5);
@@ -303,7 +303,7 @@ describe('helpers', () => {
   });
 
   it('weighs a strong strength reading above a weak trend', () => {
-    expect(topReasons({ tone: 'bullish', signals: groups({ trend: 0.3, strength: 1 }) })).toEqual(['strength', 'trend']);
+    expect(topReasons({ tone: 'up', signals: groups({ trend: 0.3, strength: 1 }) })).toEqual(['strength', 'trend']);
   });
 
   it('knows stablecoins and gold tokens by symbol', () => {

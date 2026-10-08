@@ -1,6 +1,6 @@
 <script lang="ts">
   import { avgReturn, AGREEMENTS, HORIZONS, LABELS, pctFell, pctRight, pctRose, type Horizon, type Tally } from '../../shared/backtest';
-  import { GROUPS } from '../../shared/signals';
+  import { GROUPS, toneOf } from '../../shared/signals';
   import HitBar from '../components/HitBar.svelte';
   import ErrorInline from '../components/ErrorInline.svelte';
   import { formatDate, formatPct, sourceLabel } from '../lib/format';
@@ -29,7 +29,6 @@
     if (Math.abs(d) < 2) return 'about the same as any day';
     return `${Math.abs(d).toFixed(0)} points ${d > 0 ? 'more' : 'less'} often than any day`;
   };
-  const toneOf = (label: string) => (label.includes('bullish') ? 'bullish' : label.includes('bearish') ? 'bearish' : 'neutral');
   const avg = (t: Tally) => {
     const a = avgReturn(t);
     return a == null ? '—' : formatPct(a, 1);
@@ -82,7 +81,7 @@
       On any day, the price was <strong>higher {horizon} days later {pct0(baseRose)}</strong> of the time (average change {avg(r.baseline)}).
     </p>
     <p class="mt-2 text-sm text-muted">
-      A signal is only useful if it beats this. In a mostly rising market almost every bullish signal looks “right”.
+      A rating only tells you something about what comes next if it beats this. In a mostly rising market almost every uptrend looks “right”.
     </p>
   </section>
 
@@ -92,18 +91,18 @@
       {#each LABELS as label}
         {@const t = r.labels[label]}
         {@const tone = toneOf(label)}
-        {@const pct = tone === 'bearish' ? pctFell(t) : pctRose(t)}
+        {@const pct = tone === 'down' ? pctFell(t) : pctRose(t)}
         <li class="px-4 py-3">
           <div class="flex items-baseline justify-between gap-2">
-            <span class="font-medium {tone === 'bullish' ? 'text-up' : tone === 'bearish' ? 'text-down' : ''}">{label}</span>
+            <span class="font-medium {tone === 'up' ? 'text-up' : tone === 'down' ? 'text-down' : ''}">{label}</span>
             <span class="text-sm text-muted tabular-nums">{count(t.n)} days</span>
           </div>
           {#if t.n}
             <p class="text-[15px]">
-              {tone === 'bearish' ? 'Lower' : 'Higher'} {horizon} days later <strong>{pct0(pct)}</strong> of the time · average change {avg(t)}
+              {tone === 'down' ? 'Lower' : 'Higher'} {horizon} days later <strong>{pct0(pct)}</strong> of the time · average change {avg(t)}
             </p>
-            <HitBar pct={pct ?? 0} baseline={tone === 'bearish' ? baseFell : baseRose} {tone} />
-            <p class="mt-1 text-xs text-muted">{vsBase(pct, tone === 'bearish' ? baseFell : baseRose)}</p>
+            <HitBar pct={pct ?? 0} baseline={tone === 'down' ? baseFell : baseRose} {tone} />
+            <p class="mt-1 text-xs text-muted">{vsBase(pct, tone === 'down' ? baseFell : baseRose)}</p>
           {:else}
             <p class="text-sm text-muted">Didn’t occur in this period.</p>
           {/if}
@@ -119,22 +118,22 @@
         {@const t = r.groups[g.key]}
         <li class="rounded-2xl border border-line bg-surface p-4">
           <h3 class="font-medium">{g.name}</h3>
-          {#each [{ kind: 'bullish', tally: t.bullish }, { kind: 'bearish', tally: t.bearish }] as row}
-            {@const pct = row.kind === 'bearish' ? pctFell(row.tally) : pctRose(row.tally)}
-            {@const base = row.kind === 'bearish' ? baseFell : baseRose}
+          {#each [{ kind: 'up', tally: t.up }, { kind: 'down', tally: t.down }] as row}
+            {@const pct = row.kind === 'down' ? pctFell(row.tally) : pctRose(row.tally)}
+            {@const base = row.kind === 'down' ? baseFell : baseRose}
             <div class="mt-2">
               <p class="text-[15px]">
-                <span class={row.kind === 'bullish' ? 'text-up' : 'text-down'}>
-                  <span aria-hidden="true">{row.kind === 'bullish' ? '▲' : '▼'}</span> When {row.kind}:
+                <span class={row.kind === 'up' ? 'text-up' : 'text-down'}>
+                  <span aria-hidden="true">{row.kind === 'up' ? '▲' : '▼'}</span> When {row.kind}:
                 </span>
                 {#if row.tally.n}
-                  {row.kind === 'bearish' ? 'lower' : 'higher'} {pct0(pct)} of the time
+                  {row.kind === 'down' ? 'lower' : 'higher'} {pct0(pct)} of the time
                   <span class="text-sm text-muted">· {count(row.tally.n)} days · average change {avg(row.tally)}</span>
                 {:else}
                   <span class="text-muted">didn’t occur</span>
                 {/if}
               </p>
-              {#if row.tally.n}<HitBar pct={pct ?? 0} baseline={base} tone={row.kind as 'bullish' | 'bearish'} />{/if}
+              {#if row.tally.n}<HitBar pct={pct ?? 0} baseline={base} tone={row.kind as 'up' | 'down'} />{/if}
             </div>
           {/each}
         </li>
@@ -146,7 +145,7 @@
     <h2 id="conf-heading" class="mb-2 px-1 font-semibold">Were ratings right more often when the checks agreed?</h2>
     <div class="rounded-2xl border border-line bg-surface p-4">
       <p class="text-[15px] text-muted">
-        How often bullish and bearish ratings were right (the price went the way they leaned), by how much the checks agreed. If
+        How often uptrend and downtrend ratings were followed by a move the same way, by how much the checks agreed. If
         agreement helped, High would beat Low. Across all top-100 coins it has only weakly, over 30 days and not over 7, which is why
         it’s called agreement, not confidence.
       </p>

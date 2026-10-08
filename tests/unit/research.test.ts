@@ -33,7 +33,7 @@ const reading = (t: number, label: Reading['label'], ret: number, over: Partial<
   signals: { trend: 0, strength: null, rsi: 0, volume: 0 },
   label,
   score,
-  agreement: label && !label.startsWith('Mixed') ? 'High' : 'Medium',
+  agreement: label && label !== 'No clear trend' ? 'High' : 'Medium',
   returns: { 7: ret, 30: ret },
 });
 
@@ -53,11 +53,11 @@ function market(days: number[], f: (coin: number, t: number) => { label: Reading
 
 describe('the frozen pre-Phase-4 rules', () => {
   it('scored six checks, Fear & Greed included', () => {
-    expect(v1Label(metrics())).toBe('Mixed / neutral');
+    expect(v1Label(metrics())).toBe('No clear trend');
     // Extreme fear alone (15 of 100) tipped every otherwise-neutral coin to "Leaning bullish":
     // one reason Fear & Greed is now context only.
-    expect(v1Label(metrics({ fearGreed: 10 }))).toBe('Leaning bullish');
-    expect(v1Label(metrics({ fearGreed: 10, close: 90 }))).toBe('Mixed / neutral');
+    expect(v1Label(metrics({ fearGreed: 10 }))).toBe('Uptrend');
+    expect(v1Label(metrics({ fearGreed: 10, close: 90 }))).toBe('No clear trend');
   });
 });
 
@@ -93,7 +93,7 @@ describe('compare', () => {
   const coins = market([at(2021), at(2021, 1), at(2024), at(2024, 1)], (k, t) => {
     const bull = k % 2 === 0;
     const good = new Date(t).getUTCFullYear() === 2021;
-    return { label: bull ? 'Leaning bullish' : 'Leaning bearish', ret: (bull === good ? 0.1 : -0.1) + k / 1000, score: bull ? 30 : -30, r90: bull ? 5 : -5 };
+    return { label: bull ? 'Uptrend' : 'Downtrend', ret: (bull === good ? 0.1 : -0.1) + k / 1000, score: bull ? 30 : -30, r90: bull ? 5 : -5 };
   });
   const c = compare(coins, ['Gone'], ['Fund']);
 
