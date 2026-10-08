@@ -158,7 +158,10 @@ export function phase7(coins: CoinInput[], supply: Map<number, number> | null): 
   };
 }
 
-/** The acceptance rule (PLAN.md §5, Phase 6 and 7), with the reason when a rule fails. */
+/** Points of held-out spread a change must add over the current rules to earn its complexity (PLAN.md §5, standing acceptance rule). */
+export const MIN_GAIN = 1;
+
+/** The standing acceptance rule (PLAN.md §5, *Where the accuracy work stops*), with the reason when a rule fails. */
 export function verdict(ev: Evaluated, key: string): { pass: boolean; why: string } {
   const h = yearly(ev, key, 'heldout', 'abs');
   const cur = yearly(ev, 'current', 'heldout', 'abs').mean;
@@ -167,11 +170,14 @@ export function verdict(ev: Evaluated, key: string): { pass: boolean; why: strin
   const fails: string[] = [];
   if (h.mean == null) return { pass: false, why: 'no held-out spread' };
   if (cur != null && h.mean <= cur) fails.push('not above the current rules');
+  else if (cur != null && h.mean - cur < MIN_GAIN) fails.push(`less than ${MIN_GAIN} point above the current rules`);
   if (mom != null && h.mean <= mom) fails.push('not above 90-day momentum');
   if (h.positive * 2 <= h.of) fails.push(`positive in only ${h.positive} of ${h.of} held-out years`);
   if (!diff || diff[0] <= 0) fails.push('the range of its difference from the current rules includes 0');
   return { pass: fails.length === 0, why: fails.length ? fails.join('; ') : 'passes every part' };
 }
+
+export const ACCEPTANCE = `Acceptance: on the held-out years, a spread at least ${MIN_GAIN} point above the current rules and above 90-day momentum, positive in most years, and a 90% range for the difference from the current rules that excludes 0.`;
 
 export function phase7Markdown(p: Phase7): string {
   const L: string[] = [];
@@ -203,7 +209,7 @@ export function phase7Markdown(p: Phase7): string {
     if (p.supply.check) L.push(`Fifth check: ${v(p.supply.check)}`, '');
   }
   L.push(
-    'Acceptance: on the held-out years, a higher spread than the current rules and 90-day momentum, positive in most years, and a 90% range for the difference from the current rules that excludes 0.',
+    ACCEPTANCE,
     '',
   );
   return L.join('\n');
