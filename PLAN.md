@@ -151,26 +151,26 @@ Each data type has an ordered source list (§1). The adapter tries them in order
 
 All signals come from **daily closes (up to 365)** plus volume, with no machine learning and no price targets. An indicator is skipped, and the skip is shown, when there isn't enough history (e.g. no SMA200 for coins younger than 200 days).
 
-### Indicators
+### Checks (Phase 4 rules)
 
-| # | Signal | Formula | Bullish (+1) | Bearish (−1) | Neutral (0) | Weight |
-|---|---|---|---|---|---|---|
-| 1 | Long-term trend | Close vs SMA200 | Close > SMA200 | Close < SMA200 | within ±2% | 25 |
-| 2 | Trend cross | SMA50 vs SMA200 | SMA50 > SMA200 | SMA50 < SMA200 | within ±1% | 15 |
-| 3 | Momentum | MACD(12,26,9) histogram | > 0 and rising for 3 days | < 0 and falling for 3 days | otherwise | 20 |
-| 4 | RSI(14), Wilder | `100 − 100/(1+RS)` | < 30 (oversold) | > 70 (overbought) | 30–70 | 15 |
-| 5 | Volume confirmation | 7d avg volume ÷ 30d avg volume | > 1.3 and 7d return > 0 | > 1.3 and 7d return < 0 | ratio ≤ 1.3 | 10 |
-| 6 | Market mood (same for every coin) | Fear & Greed | ≤ 25 (extreme fear: contrarian) | ≥ 75 (extreme greed) | 26–74 | 15 |
+The score comes from four groups. Each reads from −1 (bearish) to +1 (bullish); distances are **graded** (0 inside a neutral band, rising in a straight line to ±1 at a "full" value) rather than just +1/0/−1. For coins more volatile than 60% a year, every band and full value is widened in proportion, up to 3× (`volScale`), so a 2% move counts for BTC but not for a coin that swings 150% a year.
 
-**Context only, not scored:** 30-day annualized volatility (`stdev(ln returns) × √365`) labeled Low < 40%, Medium 40–80%, High > 80%. Also distance from all-time high, and 1h/24h/7d/30d returns.
+| Group | Weight | How it's read |
+|---|---|---|
+| **Trend** | 45 | The plain average of three parts: price vs SMA200 (neutral within ±2%, full at ±20%); SMA50 vs SMA200 (±1%, full at ±10%); MACD(12,26,9) histogram (+1 if > 0 and rising 3 days, −1 if < 0 and falling 3 days, else 0). Averaged because the three measure much the same thing. Required for a rating. |
+| **Strength vs Bitcoin** | 25 | Coin's 90-day return minus Bitcoin's, in percentage points: neutral within ±5, full at ±50. Not used for Bitcoin itself. |
+| **RSI(14), Wilder** | 15 | Depends on the long-term trend (the price-vs-SMA200 part). RSI < 30: +1 in an uptrend or with no clear trend, 0 in a downtrend (fast falls often keep falling). RSI > 70: −1 in a downtrend or with no clear trend, 0 in an uptrend. |
+| **Volume** | 15 | 7-day ÷ 30-day average volume > 1.3: ±1 in the direction of the 7-day move, else 0. |
+
+**Market context, never scored:** Fear & Greed (the same for every coin, so it couldn't tell coins apart; under the old rules extreme fear alone tipped every neutral coin to "Leaning bullish"); **market breadth** (share of rated coins above their 200-day average); **liquidity** (24h volume ÷ market cap); distance from the all-time high; 30-day annualized volatility (`stdev(ln returns) × √365`, Low < 40%, Medium 40–80%, High > 80%).
 
 ### Where signals are computed
-- **Signals screen (all coins):** the Worker rates ~90 coins (stablecoins excluded) in batches of 8 per 10-minute cron run, stalest first, from 250 daily candles each (Binance → Kraken → CoinGecko, with CoinGecko used at most twice a day per coin). Results live in KV and are served from `/api/signals`.
-- **Coin page:** the browser works out the coin's rating from the same 1-year daily candles it already downloads for the chart and volatility, using the same shared code. If that fails, it shows the server's rating.
+- **Signals screen (all coins):** the Worker rates ~90 coins (stablecoins excluded) in batches of 8 per 10-minute cron run, stalest first but Bitcoin always first, from 250 daily candles each (Binance → Kraken → CoinGecko, with CoinGecko used at most twice a day per coin). Bitcoin's 90-day return and market breadth are worked out from the ratings so far and passed to every coin. Results live in KV (with a format version, so ratings in an older format are dropped and rebuilt) and are served from `/api/signals`; `/api/health` shows the market context.
+- **Coin page:** shows the server's rating when it is under 3 hours old; otherwise the browser works it out from the 1-year daily candles it already downloads for the chart, using the same shared code and the server's Bitcoin return and breadth.
 - The rules live in `shared/signals.ts`; the plain-English sentences in `src/lib/explain.ts`. Tests check RSI against a published worked example and MACD against a case with an exact answer.
 
 ### Combining signals
-- `score = Σ(weightᵢ × signalᵢ) / Σ(weightᵢ of indicators that had enough data) × 100`, giving a range of −100 to +100.
+- `score = Σ(weightᵢ × readingᵢ) / Σ(weightᵢ of groups that had enough data) × 100`, giving −100 to +100. A rating needs the trend group plus at least one other.
 - **Overall rating:**
 
   | Score | Label shown |
@@ -181,64 +181,68 @@ All signals come from **daily closes (up to 365)** plus volume, with no machine 
   | −49 to −15 | Leaning bearish |
   | ≤ −50 | Strong bearish signals |
 
-- **Confidence** (High / Medium / Low): the share of non-neutral indicators that agree with the overall direction (≥ 75% High, ≥ 50% Medium); for a Mixed rating, the share of indicators that are themselves neutral. Lowered one level if volatility is High or if fewer than 5 indicators had enough data. Coins with fewer than 3 usable indicators aren't rated.
+- **Confidence** (High / Medium / Low): a group counts as bullish or bearish from ±0.25. Confidence is the share of those clear groups that agree with the overall direction (≥ 75% High, ≥ 50% Medium); for a Mixed rating, the share of groups that are themselves neutral. Counting groups rather than single indicators stops three trend checks from "agreeing" with each other. It is then **lowered one level for each** of: volatility > 80%; fewer than 3 groups with data; thin trading (24h volume < 1% of market cap); and market context leaning against the rating, at most one level for this (bullish in extreme greed (≥ 75) or with breadth < 25%; bearish in extreme fear (≤ 25) or with breadth > 75%). Each reason is listed in "Why this rating?".
 - **Wording rules:** never say "buy" or "sell", never predict a price, and always phrase signals as past behavior ("has been", "is above").
 
 ### How a rating is shown
 Each asset page has a **"Why this rating?"** panel listing every indicator with its value, threshold, result and one sentence, for example:
 
 > **Leaning bullish · Medium confidence**
-> - ✅ Price ($64,210) is 8% above its 200-day average ($59,400). Long-term trend is up.
-> - ✅ MACD momentum has been positive and rising for 4 days.
-> - ➖ RSI is 58: neither overbought nor oversold.
-> - ⚠️ Volatility is High (86% annualized), so these signals change quickly.
+> - ✅ **Trend** (+0.7): The trend is up: 3 of three trend checks point up. Below it, each part, e.g. "Price ($64,210) is 8% above its 200-day average ($59,400)."
+> - ✅ **Strength vs Bitcoin** (+0.4): Over 90 days this coin moved +38% and Bitcoin +12%: it has outperformed Bitcoin by 26 percentage points.
+> - ➖ **RSI** (0): RSI is 58: neither overbought nor oversold.
+> - ⚠️ Why confidence is lower: Volatility is high (86% a year), so these signals can change quickly.
+> - Market context (not scored): Fear & Greed, breadth, all-time high, liquidity.
 >
 > *These signals describe past price behavior. They are not predictions or financial advice.*
 
-The dashboard also offers a **"Signals" view**: a sortable table of all assets by score, with filters such as "oversold", "above 200-day average" and "unusual volume".
+The dashboard also offers a **"Signals" view**: a sortable table of all assets by score, with filters such as "beating Bitcoin", "oversold", "above 200-day average" and "unusual volume".
 
 ### Known limitations (shown on the About page)
-Technical indicators lag the price and fail in sideways markets. They ignore fundamentals, news, token unlocks and regulation, and backtested thresholds don't guarantee future results. Low-liquidity coins produce noisy signals. Phase 3 adds a simple historical backtest page so users can see how often each signal was "right".
+Technical indicators lag the price and fail in sideways markets. They ignore fundamentals, news, token unlocks and regulation, and backtested thresholds don't guarantee future results. Low-liquidity coins produce noisy signals (Phase 4 lowers their confidence). The backtest page shows how often each check was "right" for the 20 largest coins, and the all-coins backtest (§8) compares the rules against simple baselines.
 
-### Planned improvements (Phase 4: signal quality)
+### Phase 4: signal quality
 
-The goal is a rating that is **honest and calibrated**, not one that "predicts" prices. Most of the gain comes from fixing how the current checks are combined and measuring the result, more than from adding inputs. Each step must keep every input and threshold visible in "Why this rating?" and keep the "signals, not advice" wording.
+The goal is a rating that is **honest and calibrated**, not one that "predicts" prices. Steps 1–3 are built; the rules are described in *Checks* and *Combining signals* above.
 
-**Step 1: fix the structure (no new data)**
-- **Group the trend checks.** Today the 200-day trend, the 50/200 cross and MACD all measure trend or momentum, and together they are 60% of the weight. Because they usually agree, they inflate the confidence label. Combine them into one *Trend* group, and count confidence as agreement between groups (Trend, Momentum extremes, Volume, Market context) instead of between single checks.
-- **Make the contrarian checks depend on the trend.** RSI < 30 and extreme fear both count as bullish even in a steep downtrend, where oversold coins often stay oversold. New rule: in an uptrend (close > SMA200), RSI < 30 reads as "dip in an uptrend" (bullish); in a downtrend it is neutral, and the explanation says the drop is fast. Overbought gets the mirror-image rule.
-- **Move Fear & Greed out of the per-coin score.** It is one number for the whole market, so it shifts every coin by the same amount and can't tell coins apart. Show it as market context, and let extreme readings lower confidence instead of voting.
-- **Graded instead of −1/0/+1.** Scale each check from −1 to +1 with caps (e.g. distance from SMA200 counts in full at ±10%), so a price 2.1% above the average no longer counts the same as one 80% above.
-- **Scale thresholds by volatility.** The "neutral band" for trend and cross widens with the coin's volatility. ±2% means a lot for BTC but very little for a small-cap coin.
+**Step 1, structure (built):** trend checks grouped into one *Trend* group; RSI read with the trend; Fear & Greed moved out of the score into context; graded readings; thresholds widened for volatile coins; confidence counted between groups. Differences from the first draft: MACD, RSI and volume stay +1/0/−1 (only distances are graded, where the size of the move means something); "full strength" for price vs the 200-day average is ±20% rather than ±10%, because crypto routinely trades 10% from its average.
 
-**Step 2: add metrics from data already fetched (no new requests)**
+**Step 2, new metrics (built):** strength vs Bitcoin (scored, 25%); market breadth, liquidity and distance from the all-time high (context; breadth and liquidity can lower confidence). No new API requests.
 
-| Metric | Formula | Use | Data |
+**Step 3, measurement (built):** `tests/research/` replays the live rules, a frozen copy of the pre-Phase-4 rules (`tests/research/v1.ts`), 90-day momentum and "always bullish" on ~1000 days for every coin in the top 100 with exchange history, split into an older and a newer half by date. `.github/workflows/backtest.yml` runs it whenever the rules change, monthly, and on demand, and publishes the report as the run summary. The in-app backtest page (20 coins) also gained a "Does confidence mean anything?" section.
+
+**First results** ([`docs/backtest.md`](docs/backtest.md); 64 coins, July 2024 to September 2026):
+
+| Next 30 days | Spread, older half | Spread, newer half | Right, newer half |
 |---|---|---|---|
-| Strength vs BTC | coin 90-day return − BTC 90-day return | Scored (new *Relative strength* group) | Daily candles already fetched; BTC's return is stored in KV when BTC is rated |
-| Distance from all-time high | `athChangePct` | Context, and part of the explanation (deep drawdowns recover slowly; near the high there is less overhead) | Already in the CoinGecko snapshot |
-| Market breadth | share of rated coins with close > SMA200 | Market context replacing Fear & Greed's vote; very low or very high breadth lowers confidence | Computed from the existing signals document |
-| Liquidity | 24h volume ÷ market cap | Below ~1%, confidence drops one level and a "thinly traded" note is shown | Already in the snapshot |
+| Current rules (Phase 4) | −15.5 pts | +13.5 pts | 55.7% |
+| Rules before Phase 4 | −15.0 pts | +12.4 pts | 56.5% |
+| 90-day momentum | −8.3 pts | +8.0 pts | 54.1% |
+| Always bullish | — | — | 44.1% |
 
-**Step 3: measure across all coins**
-- Extend the backtest to every rated coin (not just the top 20), with each check's hit rate at 7 and 30 days.
-- Compare against two baselines: "always bullish" and plain 90-day momentum. A check that doesn't beat both is dropped or kept as context only.
-- **Walk-forward test:** tune on the older half of the history and report results on the newer half only, so thresholds aren't fitted to past prices.
-- **Calibration check:** "High confidence" ratings must have a better hit rate than "Low" ones; if not, the confidence rules change.
-- Runs as a script in CI, not in the browser, and writes a results table that the backtest page and this plan both link to.
+*Spread* = average return after bullish calls minus after bearish calls.
 
-**Step 4: futures data (only if reachable) ⚠ verify before build**
-- **Funding rate and open interest** from a public futures API (Binance `fapi/v1/premiumIndex` returns every symbol in one request; Bybit and OKX have equivalents). Very high positive funding means a crowded leveraged long; it lowers the score or confidence. Strongly negative funding reads as crowded shorts.
-- Binance futures blocks US IP addresses, and Cloudflare Workers may run from US locations; the current Binance source (`data-api.binance.vision`) is spot only. Check from the Worker first, and fall back to Bybit or OKX. Budget: 1 request per snapshot run.
+- **New vs old rules: about the same.** The differences (about 1 point of spread) are far smaller than the swing between the two halves, and overlapping windows on correlated coins leave few independent results. The Phase 4 changes make the ratings more honest and easier to explain; the data doesn't show they made them more accurate.
+- **The rules follow trends, so they depend on the market's mood.** In the older half (mostly a choppy, bounce-back market) bearish calls were followed by *gains* of about 12% on average: the signals pointed the wrong way. In the newer half (mostly falling) they pointed the right way. Both baselines show the same flip. A two-year sample holds about two market regimes, so neither half proves much.
+- **Acceptance check:** "match or beat the current rules and both baselines on the newer half": met on spread at 30 days (+13.5 vs +12.4 and +8.0), roughly matched at 7 days (+1.96 vs +2.03 and +1.60). **"High confidence beats Low": not met.** In the newer half, High, Medium and Low were right 55.0%, 55.4% and 56.7% of the time at 30 days; in the older half High was the *worst* (34.8%). Confidence measures how much the checks agree, and agreement didn't predict being right.
+
+**Open decisions**
+1. **What to do about confidence.** Tuning it on the older half would just fit that one market regime. Recommended: keep the rule, but rename the label to **"Agreement: High / Medium / Low"** (what it actually measures) and say on the backtest page that it hasn't predicted reliability. Alternatively drop it.
+2. **Pegged assets the stablecoin list misses.** The backtest skipped 24 coins; several are tokenised funds or newer stablecoins (e.g. BlackRock BUIDL, Ondo USDY, Circle USYC, GHO, Tether Gold) that the live job still rates. Detect them by price behaviour (e.g. under 3% a year volatility) rather than a hand-kept list.
+
+**Step 4: futures data (not started) ⚠ verify before build**
+- **Funding rate and open interest** from a public futures API (Binance `fapi/v1/premiumIndex` returns every symbol in one request; Bybit and OKX have equivalents). Very high positive funding means a crowded leveraged long; it would lower confidence. Strongly negative funding reads as crowded shorts.
+- Waits on the Worker CPU check: parsing every symbol's funding on each snapshot run adds CPU to the heavier cron. Binance futures also blocks US IP addresses; check from the Worker first and fall back to Bybit or OKX. Budget: 1 request per snapshot run.
 
 **Considered and not planned**
-- **Stablecoin supply growth and DeFi TVL** (DefiLlama free API): reasonable market-wide context, but it adds a source for a small gain. Revisit after Step 3.
+- **Stablecoin supply growth and DeFi TVL** (DefiLlama free API): reasonable market-wide context, but it adds a source for a small gain.
 - **On-chain data** (exchange flows, MVRV, active addresses): good sources are paid, cover only BTC and ETH, or have unclear terms.
 - **Token unlock schedules:** no free source with clear terms.
 - **Social sentiment:** needs scraping, which breaks the "public API with clear terms" rule.
 - **Machine learning:** not transparent, and overfits easily on a few years of daily data.
+- **Tuning thresholds to the backtest:** with about two market regimes of history, it would mostly fit noise.
 
-**Constraints:** new inputs must fit the free plan's 50 requests and 10 ms of CPU per Worker run (check the dashboard's CPU numbers before adding work to the signal cron). Fewer, tested checks beat many tuned ones, and every new threshold is documented in `shared/signals.ts` like the existing ones.
+**Constraints:** new inputs must fit the free plan's 50 requests and 10 ms of CPU per Worker run. Fewer, tested checks beat many tuned ones, and every threshold is documented in `shared/signals.ts`.
 
 ---
 
@@ -341,8 +345,9 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | Visual | Playwright screenshots at 360 px and 412 px | Catch text wrapping, cut-off numbers and overlap on small screens |
 | Real devices | Manual, before each release | One iPhone (Safari) and one mid-range Android (Chrome): scrolling, chart touch, bottom sheets, back button, Add to Home Screen |
 | Performance | Lighthouse CI | Budgets from §7 |
+| Signal research | Vitest against live APIs (`vitest.research.config.ts`) | All-coins backtest of the live rules vs the pre-Phase-4 rules, 90-day momentum and always-bullish, older and newer half separately (§5 *Phase 4*) |
 
-**CI on GitHub Actions (free for public repos):** on every PR, run lint, typecheck, unit/integration tests, build, Playwright and Lighthouse CI. A **nightly "live contract" job** calls each real API once and validates it against the schemas, giving early warning of upstream changes.
+**CI on GitHub Actions (free for public repos):** on every PR, run lint, typecheck, unit/integration tests, build, Playwright and Lighthouse CI. A **nightly "live contract" job** calls each real API once and validates it against the schemas, giving early warning of upstream changes. A **signal backtest job** (`backtest.yml`) runs when the rules change, monthly, and on demand, and publishes its report as the run summary.
 
 ---
 
@@ -388,12 +393,12 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | **1: MVP** | Worker cron and snapshot, prices and candles endpoints with failover; dashboard (market bar, top-50 table, sparklines); asset page with 7D/30D/1Y chart; local watchlist; freshness stamps; disclaimer and About page; dark/light themes | 2–3 weeks | Every screen works one-handed on a 360 px phone with no horizontal scrolling; then also on desktop; Lighthouse mobile ≥ 90; with the primary source blocked in tests, data still loads from the fallback; with every source blocked, the last good data shows with a stale banner; no console errors |
 | **2: v1 Signals** | Indicator module with tests; SignalBadge, SignalCard and WhySheet, Signals screener; Fear & Greed and trending widgets; offline app shell and Add to Home Screen (PWA); accessibility pass with axe; currency selector | 1.5–2 weeks | Indicator tests match the reference fixtures to within 0.01; every rating explains every indicator in plain English; no serious axe violations |
 | **3: Polish and trust** | Signal backtest page (how often each signal was followed by a rise or fall); watchlist export/import; optional cookieless analytics; nightly contract job opening issues; news feed only if a source with suitable terms is found | 1.5–2 weeks | The backtest reproduces the documented results; a contract failure opens an issue within 24 h |
-| **4: Signal quality** | Group the trend checks, make RSI depend on the trend, move Fear & Greed to context, graded scores and volatility-scaled thresholds; strength vs BTC, distance from all-time high, market breadth and liquidity; backtest across all coins with walk-forward and calibration checks; futures funding rate if reachable (see §5, *Planned improvements*) | 2–3 weeks | On the newer half of the history, the new rules match or beat the current rules and both baselines; High-confidence ratings have a better hit rate than Low; Worker CPU stays under 10 ms per run; every new input is explained in "Why this rating?" |
+| **4: Signal quality** | Group the trend checks, make RSI depend on the trend, move Fear & Greed to context, graded scores and volatility-scaled thresholds; strength vs BTC, distance from all-time high, market breadth and liquidity; backtest across all coins with walk-forward and calibration checks; futures funding rate if reachable (see §5, *Phase 4*) | 2–3 weeks | On the newer half of the history, the new rules match or beat the current rules and both baselines; High-confidence ratings have a better hit rate than Low; Worker CPU stays under 10 ms per run; every new input is explained in "Why this rating?" |
 | **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
 
-**Status:** Phases 0–3 are built, including the Phase 1 leftovers, and tested against mocked APIs (123 unit tests, 108 browser tests at 360/375/412 px phones and desktop).
+**Status:** Phases 0–3 are built, including the Phase 1 leftovers, and tested against mocked APIs (browser tests at 360/375/412 px phones and desktop).
 - Phase 2: signals; offline app shell and install; currency selector; accessibility checks on every screen and sheet.
 - Phase 3:
   - **Backtest** (`#/signals/backtest`): the live rules replayed on ~1,000 daily candles for the 20 largest non-stable coins, at 7- and 30-day horizons, each result shown next to the "any day" baseline, with caveats (overlapping windows, correlated coins, survivorship, no costs). Engine in `shared/backtest.ts`, tested for no look-ahead, identical rules to live, and a fixed reference result; runs in a Web Worker and is cached for the day. History comes from `/api/history/:id` (Binance, then Kraken; CoinGecko's free plan only has a year) and `/api/fear-greed/history`.
@@ -408,7 +413,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 
 Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`; the nightly contract check has passed against all live APIs.
 
-Next: Phase 4 (signal quality), not yet started.
+- Phase 4: Steps 1–3 built (150 unit tests, 112 browser tests). First all-coins backtest: the new rules match the old ones and beat both baselines on the newer half, but confidence doesn't predict reliability; see §5 *Phase 4* for the results and the two open decisions. Step 4 (futures funding) waits on the Worker CPU check.
 
 ---
 
