@@ -40,7 +40,7 @@ jobs:
           npx wrangler deploy 2>&1 | tee deploy.log
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
           echo "url=$url" >> "$GITHUB_OUTPUT"
-      - name: Give the Worker the CoinGecko key (if the repository has one)
+      - name: Give the Worker the CoinGecko key (or remove it if the repository no longer has one)
         if: steps.token.outputs.present == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -49,6 +49,10 @@ jobs:
         run: |
           if [ -n "$COINGECKO_DEMO_KEY" ]; then
             printf '%s' "$COINGECKO_DEMO_KEY" | npx wrangler secret put COINGECKO_DEMO_KEY
+          elif npx wrangler secret list --format json | grep -q '"name": *"COINGECKO_DEMO_KEY"'; then
+            # Worker secrets survive deploys: remove the old copy so a removed (maybe revoked) key isn't still sent.
+            echo "No COINGECKO_DEMO_KEY repository secret: removing the Worker's old copy, so it uses CoinGecko's keyless public API."
+            npx wrangler secret delete COINGECKO_DEMO_KEY
           else
             echo "No COINGECKO_DEMO_KEY secret: the Worker uses CoinGecko's keyless public API."
           fi
