@@ -68,7 +68,7 @@ Everything runs on Cloudflare's free plan as one Worker that serves both the app
    - `COINGECKO_DEMO_KEY` (optional but recommended): a free [CoinGecko Demo API key](https://www.coingecko.com/en/api/pricing), no card needed. The deploy copies it into the Worker (and removes it again if you delete the secret); it's never sent to the browser. The nightly API check uses it too.
 5. **Deploy:** **Actions → Deploy → Run workflow** (after that, every push to `main` deploys by itself). The run's summary shows your URL and a first health check. The KV storage the app needs is created automatically on the first deploy.
 6. **Check it:** open the URL, and `/api/health` on it. Signals fill in over the first ~2 hours as coins are rated in batches.
-7. **After a day:** Cloudflare dashboard → **Workers & Pages → cryptoguru → Metrics → CPU time**. Free-plan runs are cut off at 10 ms of CPU; if you see errors, lower `BATCH` in `worker/signals.ts`.
+7. **After a day:** Cloudflare dashboard → **Workers & Pages → cryptoguru → Metrics**. The free plan allows 10 ms of CPU per run with some leeway; runs here measured P50 ~11 ms and P90 ~26 ms with no errors. Watch **Errors by invocation status**: if "Exceeded CPU Time Limits" is ever above 0, lower `BATCH` in `worker/signals.ts` from 8 to 4 and raise `SIGNAL_REFRESH_MS` to 4 hours.
 
 <details><summary>Deploying from your own computer instead</summary>
 
