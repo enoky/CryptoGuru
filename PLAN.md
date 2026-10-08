@@ -1,0 +1,385 @@
+# CryptoGuru — Implementation Plan
+
+> Produced from [`PROMPT.md`](./PROMPT.md). Items marked **⚠ verify before build** depend on free-tier limits or API terms that change often; check them against the provider's current docs before writing code.
+
+**One-line summary:** a static Svelte single-page app served by one Cloudflare Worker (using Workers static assets), which also that caches CoinGecko and Binance public data for all users. In the browser, the app computes transparent technical-indicator signals and explains each one in plain English. Running cost is $0; there are no user accounts and no tracking.
+
+---
+
+## 1. Data sources
+
+| Source | Key endpoints | Free limits | CORS | Terms / attribution | Powers |
+|---|---|---|---|---|---|
+| **CoinGecko** (Demo plan, free key, no card) | `/coins/markets`, `/coins/{id}/market_chart`, `/global`, `/search/trending`, `/coins/{id}` | ~30 calls/min, **10k calls/month** ⚠ verify before build | Yes | "Data provided by CoinGecko" link required | Rankings, market cap, supply, ATH, global stats, trending, coin metadata |
+| **Binance public market data** (`data-api.binance.vision`) | `/api/v3/ticker/24hr`, `/api/v3/klines` | Weight-based, ~6000 weight/min per IP ⚠ | Yes | Public market data; `api.binance.com` blocks US IPs (HTTP 451), so use the `data-api.binance.vision` mirror ⚠ | Live prices, 24h volume, OHLC candles for charts and indicators |
+| **CoinPaprika** | `/v1/tickers`, `/v1/global`, `/v1/coins/{id}/ohlcv/historical` | Keyless, ~20k calls/month; free plan's history is limited ⚠ | Yes | Attribution requested | Fallback for markets and global stats |
+| **Kraken public** | `/0/public/OHLC`, `/0/public/Ticker` | ~1 req/s per IP | Yes | Public | Fallback for candles of major coins |
+| **Alternative.me** | `api.alternative.me/fng/?limit=30` | Keyless, generous | Yes | Attribution link required | Fear & Greed index |
+
+**Primary and fallback for each data type**
+
+| Data type | Primary | Fallback 1 | Fallback 2 |
+|---|---|---|---|
+| Top-50 list, market cap, supply, ATH | CoinGecko `/coins/markets` | CoinPaprika `/v1/tickers` | Last good snapshot in KV |
+| Live price and 24h change | Binance `ticker/24hr` | CoinGecko snapshot | CoinPaprika |
+| Daily candles (1y) | Binance `klines?interval=1d&limit=365` | CoinGecko `market_chart?days=365` | Kraken OHLC |
+| Hourly candles (7d) | Binance `klines?interval=1h&limit=168` | CoinGecko `market_chart?days=7` | — |
+| Global stats (total cap, BTC dominance) | CoinGecko `/global` | CoinPaprika `/v1/global` | Last good snapshot |
+| Trending coins | CoinGecko `/search/trending` | Hide the widget | — |
+| Fear & Greed | Alternative.me | Hide the widget, with a note | — |
+| News (optional, post-MVP) | **Not included (checked in Phase 3):** CryptoPanic's API terms couldn't be found; CoinDesk and Cointelegraph publish RSS feeds but license headline display commercially and their terms grant no republishing. Revisit only with written permission or a source whose terms clearly allow it. | — | — |
+
+Stablecoins and coins without a Binance USDT pair (e.g. LEO) use the CoinGecko candle path. The Worker maintains a `symbol → Binance pair` map built from `/api/v3/exchangeInfo` once a day.
+
+---
+
+## 2. Architecture
+
+```
+                ┌────────────────────── Cloudflare (free) ──────────────────────┐
+ Browser  ───►  │  Pages: static SPA (HTML/JS/CSS, ~150 KB gz)                  │
+  (SPA)         │                                                               │
+    │           │  Worker  /api/*                                               │
+    └──fetch──► │   ├─ Cron (every 10 min) ─► CoinGecko markets/global/trending │
+                │   │                         Alternative.me F&G (hourly)       │
+                │   │        └─ validate ─► KV "snapshot:*" (last good data)    │
+                │   ├─ /api/snapshot  ◄─ KV                                     │
+                │   ├─ /api/prices    ◄─ Cache API (30 s) ◄─ Binance ticker     │
+                │   └─ /api/candles/:id ◄─ Cache API (1 h / 15 min) ◄─ Binance  │
+                │                              │ on failure ─► CoinGecko/Kraken  │
+                └───────────────────────────────────────────────────────────────┘
+    Browser also keeps: IndexedDB copy of last snapshot + candles; localStorage prefs/watchlist
+    If the Worker is unreachable: browser calls Binance + CoinPaprika directly (both allow CORS)
+```
+
+**Why each choice**
+- **A shared Worker cache instead of each browser calling the APIs directly.** Every visitor reads the same cached data, so upstream calls grow with time rather than with traffic, and the free tiers hold up. It also keeps the CoinGecko key secret.
+- **KV for snapshots, Cache API for everything else.** KV's free tier allows only ~1,000 writes/day ⚠, so it holds only the small, cron-written "last good" snapshots (~250 writes/day, see §4). High-churn data (prices, candles) goes in the Cache API, which costs no KV writes.
+- **Cron pull instead of on-demand fetching for CoinGecko.** This puts a hard ceiling on CoinGecko usage regardless of traffic.
+- **A direct-from-browser fallback.** If the Worker or its quota is exhausted, the app still works using keyless, CORS-enabled sources.
+- **Indicators computed in the browser.** No extra server work is needed, and users can inspect the inputs.
+- **One Worker serves both the app and the API** (Workers static assets) instead of Pages plus a separate Worker. It's one deploy, the API is same-origin, and the free tier is the same. *(Changed during the MVP build.)*
+- **Two cache layers in the Worker:** an in-memory cache per isolate, then Cloudflare's Cache API. The Cache API does nothing on `*.workers.dev` domains ⚠, so the memory layer is what protects rate limits until a custom domain is added.
+
+Alternative considered: a GitHub Actions cron that commits JSON to GitHub Pages. It's simpler, but schedules can be delayed by 10–60 min and each update means a commit, so it's kept only as a contingency if Cloudflare's terms change.
+
+---
+
+## 3. Tech stack
+
+| Concern | Choice | Why |
+|---|---|---|
+| Framework | **Svelte 5 + Vite**, TypeScript, static SPA | Smallest runtime of the mainstream options; simple reactive state |
+| Routing | `svelte-spa-router` (hash routes) | Works on any static host with no rewrite rules |
+| Charts | **TradingView Lightweight Charts** (~45 KB gz) | Built for financial time series; fast; supports candles and lines |
+| Sparklines | Hand-written inline SVG | No library needed for 7-day mini charts |
+| Styling | **Tailwind CSS** + CSS variables for themes | Tiny output after purge; easy dark/light themes |
+| State | Svelte stores + a small fetch/cache layer (stale-while-revalidate) | No heavy state library needed |
+| Validation | **Valibot** (~2 KB per schema) | Like Zod but much smaller; validates every API response |
+| Client storage | `idb-keyval` (IndexedDB), localStorage | Offline last-good data; preferences |
+| Worker | TypeScript Worker, `wrangler` | Free tier; same language as the frontend |
+| Indicator maths | Own small module (no library) | Easy to test and audit; formulas are short |
+| Tests | Vitest, MSW (mock APIs), Playwright | Fast unit tests; realistic API mocks; one end-to-end smoke test |
+
+---
+
+## 4. Robustness strategy
+
+### Cache TTLs
+
+| Data | Worker TTL | Browser TTL | Refresh in UI |
+|---|---|---|---|
+| Live prices (Binance ticker) | 30 s | 30 s | every 60 s while the tab is visible |
+| Markets snapshot (CoinGecko) | cron every 10 min | 5 min | on focus / every 5 min |
+| Sparklines (7-day) | cron hourly | with snapshot | with snapshot |
+| Signal ratings | each coin re-rated every ~2 h, in batches of 8 every 10 min | 10 min | every 10 min while visible |
+| Global stats | cron every 30 min | 15 min | every 15 min |
+| Trending | cron every 2 h | 30 min | on load |
+| Fear & Greed | cron every 60 min | 1 h | on load |
+| Hourly candles (7d) | 15 min | 15 min | on opening an asset |
+| Daily candles (1y) | 1 h | 6 h (IndexedDB) | on opening an asset |
+
+Every layer uses **stale-while-revalidate**: return the cached value immediately and refresh it in the background. Polling pauses when the tab is hidden (`visibilitychange`).
+
+### Request budget (per month, regardless of visitor count)
+
+| Upstream call | Frequency | Calls/month |
+|---|---|---|
+| CoinGecko `/coins/markets` without sparklines | 144/day | ~4,460 |
+| CoinGecko `/coins/markets` with sparklines (hourly) | 24/day | ~740 |
+| CoinGecko `/global` | 48/day | ~1,490 |
+| CoinGecko `/search/trending` (every 2 h) | 12/day | ~370 |
+| CoinGecko candle fallbacks (charts, ≈10 non-Binance coins × 4/day) | 40/day | ~1,240 |
+| CoinGecko candles for signals (coins on neither Binance nor Kraken, twice a day) | ≈20/day | ~600 |
+| **CoinGecko total** | | **~8,900 / 10,000** ⚠ |
+| Binance/Kraken daily candles for signals | ~8 per 10 min | free, weight-limited |
+| KV writes (snapshot ≤144 + signals ≤144 per day) | ≤ ~290/day | under the 1,000/day limit ⚠ |
+| Worker requests | grow with traffic | the free tier is 100k/day ⚠, enough for roughly 5–10k daily visitors |
+
+### Free-plan limits per Worker run
+
+Each run (a request or a cron firing) may make **50 outbound requests** and use **10 ms of CPU** (time spent waiting on the network doesn't count) ([Cloudflare limits](https://developers.cloudflare.com/workers/platform/limits/)). So:
+- Two cron triggers, each with its own allowance: `*/10` refreshes the snapshot, `5-59/10` rates a batch of coins.
+- Every cron run uses a request budget of 45 and stops early when fewer than 3 remain.
+- Measured locally: the market list without sparklines takes ~1 ms; with sparklines ~4–5 ms (so they are fetched only hourly); a batch of 8 coins with 250 daily candles each takes ~3–7 ms. ⚠ Check CPU time in the Cloudflare dashboard after deploying and lower `BATCH` in `worker/signals.ts` if runs are cut off.
+
+If KV or Worker limits are hit, the app automatically switches to its browser-direct fallback.
+
+### Rate-limit handling
+- The Worker uses **a single request coalescer**: concurrent requests for the same key share one upstream fetch.
+- **Exponential backoff with jitter** on 429/5xx (1 s, 2 s, 4 s; max 3 tries), and it respects `Retry-After`.
+- A **circuit breaker** per source: after 3 consecutive failures, skip that source for 5 min and go straight to the fallback.
+- Prices are fetched in **batches**: one Binance call returns all symbols, and one CoinGecko page returns the top 100.
+
+### Failover
+Each data type has an ordered source list (§1). The adapter tries them in order, maps every response to one internal type (`Asset`, `Candle[]`, `GlobalStats`), and records which source served it. The UI shows the source in the footer ("Prices: Binance · Rankings: CoinGecko").
+
+### Graceful degradation
+- The page is never blank. On load it renders the IndexedDB snapshot first, then updates it.
+- Every widget shows **"Data as of HH:MM"**. It turns amber when data is older than 2× its TTL, and red with "Couldn't refresh, showing older data" when older than 6×.
+- A failing widget shows a small inline error with a Retry button; the rest of the page still works.
+- Offline: a service worker caches the app shell, so the app opens and shows the last saved data with an "Offline" banner.
+
+### Validating responses
+- Every upstream response passes through a Valibot schema in the Worker and again in the browser. Data that fails is **dropped and logged**, and the previous good value is kept.
+- Sanity checks: a price must be greater than 0 and finite; reject any change of more than 90% in 10 minutes unless two sources agree; candles must be sorted and de-duplicated.
+- Nothing upstream is rendered as HTML (text only), so a compromised API can't inject script.
+
+---
+
+## 5. Recommendation engine
+
+All signals come from **daily closes (up to 365)** plus volume, with no machine learning and no price targets. An indicator is skipped, and the skip is shown, when there isn't enough history (e.g. no SMA200 for coins younger than 200 days).
+
+### Indicators
+
+| # | Signal | Formula | Bullish (+1) | Bearish (−1) | Neutral (0) | Weight |
+|---|---|---|---|---|---|---|
+| 1 | Long-term trend | Close vs SMA200 | Close > SMA200 | Close < SMA200 | within ±2% | 25 |
+| 2 | Trend cross | SMA50 vs SMA200 | SMA50 > SMA200 | SMA50 < SMA200 | within ±1% | 15 |
+| 3 | Momentum | MACD(12,26,9) histogram | > 0 and rising for 3 days | < 0 and falling for 3 days | otherwise | 20 |
+| 4 | RSI(14), Wilder | `100 − 100/(1+RS)` | < 30 (oversold) | > 70 (overbought) | 30–70 | 15 |
+| 5 | Volume confirmation | 7d avg volume ÷ 30d avg volume | > 1.3 and 7d return > 0 | > 1.3 and 7d return < 0 | ratio ≤ 1.3 | 10 |
+| 6 | Market mood (same for every coin) | Fear & Greed | ≤ 25 (extreme fear: contrarian) | ≥ 75 (extreme greed) | 26–74 | 15 |
+
+**Context only, not scored:** 30-day annualized volatility (`stdev(ln returns) × √365`) labeled Low < 40%, Medium 40–80%, High > 80%. Also distance from all-time high, and 1h/24h/7d/30d returns.
+
+### Where signals are computed
+- **Signals screen (all coins):** the Worker rates ~90 coins (stablecoins excluded) in batches of 8 per 10-minute cron run, stalest first, from 250 daily candles each (Binance → Kraken → CoinGecko, with CoinGecko used at most twice a day per coin). Results live in KV and are served from `/api/signals`.
+- **Coin page:** the browser works out the coin's rating from the same 1-year daily candles it already downloads for the chart and volatility, using the same shared code. If that fails, it shows the server's rating.
+- The rules live in `shared/signals.ts`; the plain-English sentences in `src/lib/explain.ts`. Tests check RSI against a published worked example and MACD against a case with an exact answer.
+
+### Combining signals
+- `score = Σ(weightᵢ × signalᵢ) / Σ(weightᵢ of indicators that had enough data) × 100`, giving a range of −100 to +100.
+- **Overall rating:**
+
+  | Score | Label shown |
+  |---|---|
+  | ≥ 50 | Strong bullish signals |
+  | 15 to 49 | Leaning bullish |
+  | −14 to 14 | Mixed / neutral |
+  | −49 to −15 | Leaning bearish |
+  | ≤ −50 | Strong bearish signals |
+
+- **Confidence** (High / Medium / Low): the share of non-neutral indicators that agree with the overall direction (≥ 75% High, ≥ 50% Medium); for a Mixed rating, the share of indicators that are themselves neutral. Lowered one level if volatility is High or if fewer than 5 indicators had enough data. Coins with fewer than 3 usable indicators aren't rated.
+- **Wording rules:** never say "buy" or "sell", never predict a price, and always phrase signals as past behavior ("has been", "is above").
+
+### How a rating is shown
+Each asset page has a **"Why this rating?"** panel listing every indicator with its value, threshold, result and one sentence, for example:
+
+> **Leaning bullish · Medium confidence**
+> - ✅ Price ($64,210) is 8% above its 200-day average ($59,400). Long-term trend is up.
+> - ✅ MACD momentum has been positive and rising for 4 days.
+> - ➖ RSI is 58: neither overbought nor oversold.
+> - ⚠️ Volatility is High (86% annualized), so these signals change quickly.
+>
+> *These signals describe past price behavior. They are not predictions or financial advice.*
+
+The dashboard also offers a **"Signals" view**: a sortable table of all assets by score, with filters such as "oversold", "above 200-day average" and "unusual volume".
+
+### Known limitations (shown on the About page)
+Technical indicators lag the price and fail in sideways markets. They ignore fundamentals, news, token unlocks and regulation, and backtested thresholds don't guarantee future results. Low-liquidity coins produce noisy signals. Phase 3 adds a simple historical backtest page so users can see how often each signal was "right".
+
+---
+
+## 6. UI/UX design (mobile first)
+
+**Phones are the main target.** Every screen is designed for a **360–430 px wide portrait phone** first, used one-handed. Larger screens then get extra room. "Done" for any screen means it looks right and works by thumb on a small phone (iPhone SE / small Android) before anyone looks at the desktop layout.
+
+### Mobile layout rules
+- **Bottom tab bar** with 4 tabs: **Markets · Watchlist · Signals · About**. It sits within thumb reach, respects the iPhone home-indicator safe area (`env(safe-area-inset-bottom)`), and becomes a left sidebar at ≥ 1024 px.
+- **Cards and lists, not tables.** Each coin is one row about 64 px tall: logo, name and ticker; price; 24h % with ▲/▼; a tiny sparkline; and the signal badge. Market cap, volume and other columns live on the asset page, not in the list.
+- **Touch targets of at least 44 × 44 px** with 8 px spacing. No hover-only features: everything a tooltip shows is also reachable by tap (an ⓘ icon opens a short explanation).
+- **One column on phones.** No horizontal scrolling of the page, ever. Sideways scrolling is allowed only inside deliberate strips (trending coins, chart-range chips) that show a partial next item to hint they scroll.
+- **Readable type:** 16 px base text (which also stops iOS zooming into the search box), prices in 17–20 px tabular digits, nothing below 12 px.
+- **Sticky top bar** (about 48 px): app name, search icon and theme toggle. It hides when scrolling down and comes back when scrolling up, to save screen space.
+- **Bottom sheets instead of pop-ups:** sort options, filters, "Why this rating?" and the ⓘ explanations slide up from the bottom and close with a swipe down or the back button.
+- **Gestures are shortcuts only:** pull-to-refresh on lists, and swipe a watchlist row to remove it. Every gesture has a visible button that does the same thing.
+- **Numbers fit:** large values are shortened (`$1.23T`, `$845.2M`), and tiny prices show significant digits (`$0.00001234`) so nothing wraps or gets cut off at 360 px.
+- **The phone back button works as expected:** every screen and open sheet has its own history entry.
+
+### Screens (as seen on a phone)
+1. **Markets** (`#/`, home)
+   - A compact market strip at the top: total market cap and 24h %, BTC dominance, and a small Fear & Greed dial. Tapping it opens a sheet with details.
+   - Watchlist coins first (if any), then the top-50 list as rows (above). Signal badges appear in the rows on desktop only; on phones they would crowd the name, so ratings live on the Signals tab and coin pages, and Markets can be sorted by signal score.
+   - A sort chip ("Sort: Market cap ▾") opens a bottom sheet with market cap / 24h % / 7d % / signal score.
+   - A sideways-scrolling trending strip below the first 10 rows.
+2. **Asset detail** (`#/asset/:id`)
+   - Price header with 24h change and an "as of" time.
+   - A full-width chart about 240 px tall with large range chips (**7D · 30D · 1Y**). Touch and drag to see a crosshair with price and date; the page doesn't scroll while you drag on the chart. SMA overlays and candle view sit behind a "Chart options" chip.
+   - The signal summary card: the rating, its confidence and the top 2 reasons, with "See all reasons" opening the full "Why this rating?" sheet.
+   - Key stats as a 2-column grid of small tiles: market cap, volume, supply, ATH and % from ATH, volatility.
+   - A large star button to add to the watchlist, placed at the bottom within thumb reach.
+   - Data source and attribution at the bottom.
+3. **Watchlist** (`#/watchlist`): the same rows as Markets. Swipe or tap ✕ to remove, long-press to reorder, and export/import from the ⋯ menu. Stored only on this device.
+4. **Signals** (`#/signals`): rows sorted by signal score, with filter chips across the top ("Oversold", "Above 200-day avg", "Unusual volume").
+5. **About** (`#/about`): how signals work, limitations, data sources and attribution, privacy and an FAQ, as collapsible sections.
+
+### On larger screens
+- **Tablet (≥ 640 px):** two-column grid of rows; the chart grows to 320 px tall.
+- **Desktop (≥ 1024 px):** sidebar navigation; Markets switches to a full sortable table with extra columns (1h/7d %, market cap, volume); the asset page puts the chart and the "Why this rating?" panel side by side; sheets become side panels.
+
+### Key components
+`BottomNav`, `TopBar`, `MarketStrip`, `AssetRow` (phone) / `AssetTable` (desktop), `Sparkline`, `PriceChart`, `RangeChips`, `SignalBadge`, `SignalCard`, `BottomSheet`, `WhySheet`, `StatTile`, `FreshnessStamp`, `SourceFooter`, `ErrorInline`, `Skeleton`, `DisclaimerBanner`.
+
+### First visit
+A small dismissible card above the list reads "Signals are educational, not financial advice — learn how they work". Every term (RSI, SMA, dominance) has an ⓘ that opens a one-sentence explanation in a bottom sheet.
+
+### Installable app (PWA)
+A web app manifest and icons let users "Add to Home Screen" on Android and iOS. It then opens full-screen like a native app, with a matching status-bar color and splash screen. The offline app shell (§4) means it opens instantly, even without signal.
+
+### Visual design and themes
+- Breakpoints at 640 / 1024 / 1280 px, written as `min-width` rules: the phone layout is the default, larger screens are additions.
+- Dark and light themes that follow the system setting, plus a manual toggle. Dark is tuned for night-time phone use (no pure-white text on pure black).
+- Numbers use tabular digits; prices are formatted with `Intl.NumberFormat` (USD default; EUR/GBP selectable in Phase 2).
+
+### Accessibility (WCAG 2.1 AA)
+- Text contrast of at least 4.5:1, checked in bright-sunlight-friendly light mode too.
+- **Up and down are never shown by color alone**: ▲/▼ arrows and +/− signs always accompany them, and the palette is blue/orange rather than red/green so it works for colorblind users.
+- Works with VoiceOver and TalkBack: each coin row reads as one item ("Bitcoin, 64,210 dollars, up 2.1 percent, leaning bullish").
+- Layout holds up with phone text size set to 200%.
+- Full keyboard navigation, visible focus rings, and skip-to-content on desktop.
+- Charts have a visually hidden data-table alternative and an `aria-label` summary.
+- Respects `prefers-reduced-motion`. Live price updates are announced politely, and only for watchlisted coins.
+
+### Loading, empty and error states
+- **Loading:** skeleton rows the same size as the real ones, so nothing jumps around under the user's thumb.
+- **Empty watchlist:** a short explanation plus suggested coins to add with one tap.
+- **No search results:** a link to clear the search.
+- **Error:** an inline message with a Retry button, showing the last good data where it exists.
+- **Offline / weak signal:** a slim banner under the top bar over the cached data.
+
+---
+
+## 7. Performance targets
+
+| Metric | Target |
+|---|---|
+| First load on a mid-range Android phone over 4G (snapshot visible) | < 2 s |
+| Largest Contentful Paint | < 2.0 s |
+| Cumulative Layout Shift | < 0.05 |
+| JS bundle, initial route | < 120 KB gz (chart library lazy-loaded on the asset page). Currently 49 KB. |
+| Lighthouse **mobile** profile (Performance, Accessibility, Best Practices, SEO) | ≥ 90 each, enforced in CI |
+| Scrolling the 50-coin list | 60 fps on a mid-range phone (no jank) |
+| Tap response (Interaction to Next Paint) | < 200 ms |
+| Indicator computation for 50 assets | < 50 ms on a mid-range phone |
+
+How to get there: lazy-load routes and the chart library; serve the snapshot from the Worker as one small JSON (~40 KB gz); self-host coin logos at 32 px via the Worker cache; preconnect to the API origin.
+
+---
+
+## 8. Testing
+
+| Level | Tool | What |
+|---|---|---|
+| Unit: indicator maths | Vitest | SMA, EMA, RSI (Wilder), MACD, volatility and score combination, checked against **known reference series** (e.g. the classic Wilder RSI example; values cross-checked with a pandas-ta export saved as fixtures). Edge cases: too little history, flat prices, gaps, NaN. |
+| Unit: adapters and schemas | Vitest | Each source's response → internal type; malformed payloads are rejected; sanity checks |
+| Integration | Vitest + MSW | Fetch layer: SWR, backoff, circuit breaker, failover order, stale stamps. The Worker is tested with `wrangler`'s local runtime (Miniflare). |
+| Component | Vitest + Testing Library | SignalBadge text and icons; WhySheet wording; error/empty states |
+| End-to-end smoke | Playwright, run at **phone sizes first** (iPhone SE 375 px, Pixel 7 412 px with touch enabled), then desktop | Check there's no horizontal scrolling and that tap targets are at least 44 px. Load the dashboard with mocked APIs → open an asset → switch chart range → add to watchlist → reload and confirm it persisted → simulate the API down and confirm the stale banner appears |
+| Accessibility | `@axe-core/playwright` | No serious or critical violations on each screen, at phone and desktop sizes |
+| Visual | Playwright screenshots at 360 px and 412 px | Catch text wrapping, cut-off numbers and overlap on small screens |
+| Real devices | Manual, before each release | One iPhone (Safari) and one mid-range Android (Chrome): scrolling, chart touch, bottom sheets, back button, Add to Home Screen |
+| Performance | Lighthouse CI | Budgets from §7 |
+
+**CI on GitHub Actions (free for public repos):** on every PR, run lint, typecheck, unit/integration tests, build, Playwright and Lighthouse CI. A **nightly "live contract" job** calls each real API once and validates it against the schemas, giving early warning of upstream changes.
+
+---
+
+## 9. Deployment and operations
+
+### Deploying (all free, no credit card)
+1. Create a Cloudflare account and a **KV namespace** `SNAPSHOTS`; put its id in `wrangler.toml`.
+2. One **Worker** `cryptoguru` serves the built app (`dist/`, with single-page-app fallback) and `/api/*`, and runs the cron trigger `*/10 * * * *`. `npm run deploy` builds and deploys it.
+3. Store `COINGECKO_DEMO_KEY` as a Worker secret (`wrangler secret put`). It never appears in the frontend.
+4. GitHub Actions deploys on every push to `main` once `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets exist.
+5. Step-by-step instructions are in the README.
+
+### Noticing and responding to problems
+- `/api/health` reports the last successful fetch time per source, circuit-breaker states and the KV snapshot age.
+- A free uptime monitor (e.g. UptimeRobot, 5-min checks ⚠) watches `/api/health` and alerts by email when a source has been failing for over 30 min.
+- The nightly contract job opens a GitHub issue automatically when a schema check fails.
+- Runbook: when a source fails, failover is automatic. The maintainer then checks the provider's changelog, updates the adapter and schema, and adds a fixture from the new response.
+- The Worker logs only counts and errors, with no IP addresses or user data.
+
+---
+
+## 10. Legal and ethical
+
+**Disclaimer** (in the footer, the About page and every "Why this rating?" panel):
+
+> CryptoGuru provides general market information and automated technical-indicator signals for educational purposes only. It is not financial, investment, legal or tax advice, and it is not a recommendation to buy, sell or hold any asset. Crypto assets are highly volatile and you can lose all of your money. Signals describe past price behavior and can be wrong. Data may be delayed or inaccurate. Do your own research and consider consulting a licensed professional.
+
+**Attribution:** "Data provided by CoinGecko" with a link (required); "Fear & Greed Index by Alternative.me" with a link; Binance, CoinPaprika and Kraken credited on the About page and in the source footer. Logos are used as supplied by CoinGecko. ⚠ Check each provider's current attribution and caching terms, including any limits on redistributing cached data.
+
+**Why no personalized advice:** the app asks for no portfolio, income or goals, and gives the same signals to every user. This keeps it outside personalized investment-advice rules in most jurisdictions, avoids collecting financial personal data, and is more honest about what technical indicators can do.
+
+**Privacy:** no cookies, no analytics in the MVP (Cloudflare Web Analytics, which is cookieless, is optional in Phase 2), and no accounts. The watchlist stays on the device.
+
+**Content rules:** no "guaranteed", "moon" or urgency language, and no affiliate or exchange referral links.
+
+---
+
+## 11. Milestones
+
+| Phase | Scope | Effort (1 dev) | Acceptance criteria |
+|---|---|---|---|
+| **0: Setup** | Repo, Vite/Svelte/TS, Tailwind, lint, CI, Pages and Worker hello-world, schemas for every source | 2–3 days | CI is green; a preview deploys on each PR; `/api/health` responds |
+| **1: MVP** | Worker cron and snapshot, prices and candles endpoints with failover; dashboard (market bar, top-50 table, sparklines); asset page with 7D/30D/1Y chart; local watchlist; freshness stamps; disclaimer and About page; dark/light themes | 2–3 weeks | Every screen works one-handed on a 360 px phone with no horizontal scrolling; then also on desktop; Lighthouse mobile ≥ 90; with the primary source blocked in tests, data still loads from the fallback; with every source blocked, the last good data shows with a stale banner; no console errors |
+| **2: v1 Signals** | Indicator module with tests; SignalBadge, SignalCard and WhySheet, Signals screener; Fear & Greed and trending widgets; offline app shell and Add to Home Screen (PWA); accessibility pass with axe; currency selector | 1.5–2 weeks | Indicator tests match the reference fixtures to within 0.01; every rating explains every indicator in plain English; no serious axe violations |
+| **3: Polish and trust** | Signal backtest page (how often each signal was followed by a rise or fall); watchlist export/import; optional cookieless analytics; nightly contract job opening issues; news feed only if a source with suitable terms is found | 1.5–2 weeks | The backtest reproduces the documented results; a contract failure opens an issue within 24 h |
+| **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
+
+**Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
+
+**Status:** Phases 0–3 are built, including the Phase 1 leftovers, and tested against mocked APIs (116 unit tests, 92 browser tests at 360/375/412 px phones and desktop).
+- Phase 2: signals; offline app shell and install; currency selector; accessibility checks on every screen and sheet.
+- Phase 3:
+  - **Backtest** (`#/signals/backtest`): the live rules replayed on ~1,000 daily candles for the 20 largest non-stable coins, at 7- and 30-day horizons, each result shown next to the "any day" baseline, with caveats (overlapping windows, correlated coins, survivorship, no costs). Engine in `shared/backtest.ts`, tested for no look-ahead, identical rules to live, and a fixed reference result; runs in a Web Worker and is cached for the day. History comes from `/api/history/:id` (Binance, then Kraken; CoinGecko's free plan only has a year) and `/api/fear-greed/history`.
+  - **Watchlist export/import** as a small JSON file; imports only add; saved coins that left the top 100 are listed with a Remove button instead of silently hidden.
+  - **Nightly API contract check** (`.github/workflows/contract.yml`): calls every real API once, opens a labelled issue on failure, comments if one is open, closes it when passing again.
+  - **Cookieless analytics:** off unless built with `VITE_CF_ANALYTICS_TOKEN` (Cloudflare Web Analytics).
+  - **News feed:** not added; see §1.
+
+- Phase 1 leftovers:
+  - **Lighthouse CI** (`lighthouserc.cjs`, `ci.yml` job `lighthouse`): mobile profile against the built app with mock data (`MOCK_API=1`), 3 runs × 3 screens, judged on the median run. Every budget in §7 is enforced. Current results: Performance 99–100, Accessibility 100, Best Practices 100, SEO 100; LCP 1.2–1.85 s; CLS 0; TBT under 100 ms; initial JS 55 KB. Getting there fixed real issues: a missing `robots.txt`; layout shift on Markets, Signals and coin pages (now fixed-size placeholders); the coin page waiting on the whole snapshot (sections now load independently, the chart library and 1-year history load when idle, and the coin page shows the server's rating when it is recent, so it always matches the Signals list); big data kept deeply reactive (now stored raw); sparklines sent with 16 digits (now 5).
+  - **Gestures:** pull-to-refresh on Markets, Watchlist and Signals; swipe a watchlist row left to reveal Remove, or further to remove it, with Undo (also for Edit-mode removals). Tested with real touch input on the phone projects.
+
+Not yet done: verifying against the live APIs and deploying.
+
+---
+
+## 12. Risks and open questions
+
+| Risk / question | Impact | Mitigation |
+|---|---|---|
+| CoinGecko changes free-tier limits or terms ⚠ | Rankings and metadata stop updating | Cron-only usage with a fixed budget; CoinPaprika fallback; adapters keep sources swappable |
+| Binance mirror blocked or geo-restricted for Worker IPs ⚠ | Live prices and candles fall back to slower sources | Ordered failover to CoinGecko and Kraken; health endpoint alerts |
+| Cloudflare KV write limit (1k/day) or Worker limit (100k req/day) reached ⚠ | Stale snapshot or API errors | Low write budget (~240/day); traffic beyond the limit triggers browser-direct fallback; consider the paid tier only if traffic justifies it |
+| Users treat signals as advice | Legal and reputational risk; user losses | Neutral wording, no buy/sell language, disclaimer on every rating, published limitations and backtest |
+| Wrong or manipulated data from one source | Misleading prices or signals | Schema validation, sanity bounds, cross-source check for large moves |
+| Symbol collisions (same ticker for different coins) | Wrong candles for a coin | Map by CoinGecko ID → explicit Binance pair table; never match by ticker alone |
+| Indicator thresholds are arbitrary | Signals feel unreliable | Use the standard textbook values, document them, and let the Phase 3 backtest inform tuning |
+| Can attribution and redistribution terms allow caching data for all users? ⚠ | Possible terms violation | Read each provider's terms before building; keep cache times short; switch provider if needed |
+| **Open:** should the default list cover top 50 or top 100? | Upstream cost and UI density | Fetch 100 (same single call) and display 50 by default with "show more" |
+| **Resolved:** fiat currencies other than USD | — | Rates derived from CoinGecko `/global` market caps in each currency: no extra API and no extra calls |

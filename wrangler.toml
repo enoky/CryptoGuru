@@ -1,0 +1,22 @@
+# One Cloudflare Worker serves the built app (dist/) and the /api endpoints,
+# and runs the cron job that refreshes the market snapshot. Free tier only.
+name = "cryptoguru"
+main = "worker/index.ts"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Create with: npx wrangler kv namespace create SNAPSHOTS  — then paste the id here.
+[[kv_namespaces]]
+binding = "SNAPSHOTS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[triggers]
+# Snapshot every 10 min; signal batches 5 min later. Must match SNAPSHOT_CRON / SIGNALS_CRON in worker/app.ts.
+crons = ["*/10 * * * *", "5-59/10 * * * *"]
+
+# Secret (never in this file): npx wrangler secret put COINGECKO_DEMO_KEY

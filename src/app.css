@@ -1,0 +1,119 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --fg: #0f172a;
+  --muted: #566070;
+  --border: #dde2ea;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  /* Up/down are blue/orange (colourblind-safe) and always paired with ▲/▼. */
+  --up: #1d4ed8;
+  --down: #a8380b;
+  --warn: #92400e;
+  --warn-bg: #fef3c7;
+  --danger: #b91c1c;
+  --danger-bg: #fee2e2;
+  --nav-h: 64px;
+  --top-h: 52px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #0b0f17;
+    --surface: #131a26;
+    --surface-2: #1c2433;
+    --fg: #e6eaf2;
+    --muted: #9ba5b6;
+    --border: #263042;
+    --accent: #818cf8;
+    --accent-fg: #0b0f17;
+    --up: #60a5fa;
+    --down: #fb923c;
+    --warn: #fcd34d;
+    --warn-bg: #3a2c0a;
+    --danger: #fca5a5;
+    --danger-bg: #3b1212;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0b0f17;
+  --surface: #131a26;
+  --surface-2: #1c2433;
+  --fg: #e6eaf2;
+  --muted: #9ba5b6;
+  --border: #263042;
+  --accent: #818cf8;
+  --accent-fg: #0b0f17;
+  --up: #60a5fa;
+  --down: #fb923c;
+  --warn: #fcd34d;
+  --warn-bg: #3a2c0a;
+  --danger: #fca5a5;
+  --danger-bg: #3b1212;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.45;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.pb-nav {
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
+}
+
+@media (min-width: 1024px) {
+  .pb-nav {
+    padding-bottom: 32px;
+  }
+}
