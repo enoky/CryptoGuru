@@ -342,6 +342,63 @@ Prompted by an outside review: before more rules, find out what the existing che
 - **Ratings in detail:** on held-out years every rating's median 30-day return is negative or near 0, and its average is close to any coin-day's (+3.9%). The exception points the wrong way: *Strong downtrend* coins averaged +9.0% [+1.9, +19.0] and rose 50.9% of the time vs 45.8% for any coin. In the tuning years the pattern was reversed (*Strong uptrend* +13.1% vs +6.9%), partly survivorship (today's top coins). Ratings describe the recent trend; they don't forecast the next month.
 - **Decision:** nothing changes in the live app. The labels already describe rather than forecast (Phase 5). Further gains would need new information (on-chain, flows, positioning), not reweighting the same price checks. The extra report sections stay in the monthly backtest so this is re-checked as new held-out months arrive.
 
+### Phase 7: honest detail in the app, one volume test, stablecoin supply (Step 1 built; Steps 2–3 tested, not shipped)
+
+Follows Phase 6 and a second outside review. All three steps are display-only or backtest-only; a rule reaches the live ratings only if it passes. Every variant below is fixed **before** the backtest runs, so the result can't be tuned after the fact.
+
+**Step 1: ratings in detail on the in-app Backtest page.** Each rating, and the "any day" yardstick, gets the Phase 6 detail: median change, average when it rose, average when it fell, worst case, and a 90% range for the average from resampling whole months (`shared/stats.ts`, shared by both backtests). A short note says a rating only tells you something when its range sits clear of the yardstick's. This covers the review's "research mode" idea at the rating level only. One coin's history has too few independent episodes for per-coin figures, so the app doesn't show any.
+
+**Step 2: one volume test.** Volume was the only check whose removal hurt in Phase 6, though with four checks tested that could be luck. Each variant replaces only the volume reading; the other checks and the live weights stay as they are:
+
+- *Current:* 7-day ÷ 30-day average volume above 1.3 → the direction of the 7-day return.
+- *Graded:* direction of the 7-day return × (ratio − 1) ÷ 0.6, capped at 1, so volume is graded like the other checks.
+- *Volume surprise:* the 7-day average volume's percentile among the previous 180 days' 7-day averages; at or above the 80th (or 90th) percentile → the direction of the 7-day return.
+- *Accumulation / distribution:* ratio above 1.3 with the price within ±3% over 7 days → up (buying without a price move); ratio below 0.8 with the price up more than 5% → down (a rise on fading volume); otherwise as now.
+
+The variant with the best spread on the tuning years is picked and judged on the held-out years.
+
+**Step 3: stablecoin supply.** This is the only non-price source with enough free daily history to test (DefiLlama `stablecoins.llama.fi/stablecoincharts/all`, total circulating USD across all stablecoins, from 2017; keyless). ETF flows start in 2024, too late to test, and the free on-chain tiers (Glassnode, CryptoQuant) have too little history. The reading is the 30-day change in total supply, using only data up to each day. Two candidates:
+
+- *Market timing:* supply up more than L% over 30 days → every coin counts as up; down more than L% → every coin counts as down; L ∈ {0, 1, 2}, picked on the tuning years.
+- *A fifth check:* reading = 30-day change ÷ 3%, capped at ±1, added to the current rules with weight 15 (the others rescaled).
+
+If one passes, the Worker would add one market-wide request per refresh. It's well inside the 50-request limit, and only then would DefiLlama be added to §1.
+
+**Acceptance (Steps 2 and 3):** as Phase 6. On the held-out years the spread must be higher than the current rules and 90-day momentum and positive in most years, **and** the 90% range of the difference from the current rules must exclude 0. Results are recorded here either way.
+
+**Results** ([`docs/backtest.md`](docs/backtest.md), run 37838827221; next 30 days, held-out years 2023–2026):
+
+| Rules | Tuning spread | Held-out spread (avg of years) | Held-out years positive | Difference from current, held-out [90% range] |
+|---|---|---|---|---|
+| Current rules | −8.1 | −1.9 | 2 of 4 | — |
+| 90-day momentum | −2.6 | −1.8 | 1 of 4 | [−2.8, +5.3] |
+| Volume: graded | −8.1 | −1.8 | 2 of 4 | [−0.1, +0.3] |
+| Volume: surprise, 80th percentile (picked) | −7.8 | −1.7 | 2 of 4 | [−0.4, +0.5] |
+| Volume: surprise, 90th percentile | −7.9 | −2.1 | 2 of 4 | [−0.7, +0.0] |
+| Volume: accumulation / distribution | −7.9 | −1.6 | 2 of 4 | [+0.2, +0.6] |
+| Stablecoin timing ±0% (picked) | +6.2 | −11.5 | 2 of 4 | [−4.8, +9.1] |
+| Stablecoin timing ±1% | +1.7 | +8.9 | 2 of 3 | [−5.5, +10.3] |
+| Stablecoin timing ±2% | +2.0 | +6.1 | 1 of 2 | [−10.2, +10.6] |
+| Current rules + stablecoin supply as a fifth check | −9.0 | −2.0 | 2 of 4 | [−2.6, +0.8] |
+
+- **Step 1 (built):** the in-app Backtest page shows each rating's median, average win and loss, worst case and 90% range next to the yardstick, and says whether the average stood clear of any day's.
+- **Step 2 fails:** the picked variant (volume surprise, 80th percentile) changes the held-out spread by +0.2 points, within chance. Accumulation / distribution was the only variant whose range excludes 0, but it wasn't the tuning-years pick. Its gain is 0.4 points on a spread that stays negative, and with five variants tested, one range excluding 0 is about what chance gives. How volume is read barely matters, so the volume check stays as it is.
+- **Step 3 fails:** stablecoin supply as market timing swung from +6.2 on the tuning years to −11.5 on the held-out years at the picked level. The ±1% level looks good held-out (+8.9), but picking it now would be choosing with hindsight, and it rests on 3 years with ranges ±10 points wide. As a fifth check it made the current rules slightly worse. Supply growth mostly tracks the market cycle it's meant to predict. DefiLlama isn't added to the Worker.
+- **Decision:** nothing in the live ratings changes. The labels already describe rather than forecast (Phase 5), and the app now shows how much uncertainty its own history carries.
+
+### Where the accuracy work stops
+
+Phases 5–7 tested every reasonable idea within reach of free public data: different rules, learned weights, a choppy-market filter, stricter bands, ranking against other coins, futures funding, volume read four ways, and stablecoin liquidity. None beat the current rules beyond chance on the held-out years. A reliable 30-day forecast isn't in this data, so the search for one stops here. The ratings describe the recent trend, and the app shows how much (or how little) its own history supports them.
+
+**Standing acceptance rule for any future change to the ratings:**
+
+1. On the held-out years, a higher 30-day spread than the current rules and 90-day momentum, positive in most years.
+2. A 90% range (month-block bootstrap) for the difference from the current rules that excludes 0.
+3. A gain of at least 1 point of spread on the held-out years. A new input must earn its added complexity, requests and explanation; a smaller gain is rejected even if it passes 1–2.
+4. Settings fixed before the run and picked on the tuning years only.
+
+Reopen only with genuinely new information that has enough free history to backtest. The monthly backtest keeps re-checking the current rules and the Phase 6–7 analyses as new months arrive.
+
 ## 6. UI/UX design (mobile first)
 
 **Phones are the main target.** Every screen is designed for a **360–430 px wide portrait phone** first, used one-handed. Larger screens then get extra room. "Done" for any screen means it looks right and works by thumb on a small phone (iPhone SE / small Android) before anyone looks at the desktop layout.
@@ -492,6 +549,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | **4: Signal quality** | Group the trend checks, make RSI depend on the trend, move Fear & Greed to context, graded scores and volatility-scaled thresholds; strength vs BTC, distance from all-time high, market breadth and liquidity; backtest across all coins with walk-forward and calibration checks; futures funding rate if reachable (see §5, *Phase 4*) | 2–3 weeks | On the newer half of the history, the new rules match or beat the current rules and both baselines; High-agreement ratings have a better hit rate than Low (not met: renamed from confidence, see §5); Worker CPU stays under 10 ms per run; every new input is explained in "Why this rating?" |
 | **5: Accuracy** | Backtest back to 2017, reported per year and market phase, tuned on 2017–2022 and tested on 2023 onward; results measured against the market (relative momentum); a choppy-market filter; stricter bullish/bearish bands; futures funding and open interest if reachable (see §5, *Phase 5*) | 1.5–2 weeks | On the held-out years, positive 30-day spread in most years and higher than the current rules and 90-day momentum; steps that don't beat the current rules aren't shipped; Worker CPU under 10 ms per run |
 | **6: Learned weights** | Logistic-regression weights fitted on the tuning years; one-check-out ablation; per-rating median, wins, losses and worst case vs any coin-day; block-bootstrap 90% ranges (see §5, *Phase 6*) | 2–3 days | Phase 5 acceptance, and the range of the difference from the current rules excludes 0 (not met: nothing shipped) |
+| **7: Detail, volume, stablecoins** | Per-rating median, wins, losses, worst case and ranges on the in-app Backtest page; one volume test with variants fixed in advance; stablecoin supply (DefiLlama) as market timing and as a fifth check (see §5, *Phase 7*) | 3–4 days | Backtest page shows the detail at phone width; Steps 2–3 pass the Phase 6 acceptance or aren't shipped (Step 1 built; Steps 2–3 not met, nothing shipped) |
 | **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
@@ -514,6 +572,7 @@ Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`
 - Phase 4: Steps 1–3 built (157 unit tests, 112 browser tests). All-coins backtest: the new rules match the old ones and beat both baselines on the newer half; agreement between the checks predicts being right only weakly at best, so "confidence" is now "agreement"; pegged assets are found by how little their price moves. See §5 *Phase 4*. Futures funding moved to Phase 5.
 - Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 (futures funding) tested in the backtest and not shipped: the promising result rested on a few episodes. See §5 *Phase 5*.
 - Phase 6 (learned weights, backtest only): learned weights beat the current rules on held-out years but within chance, and leaned on mean reversion; not shipped. Volume is the only check with a measurable contribution; no rating's next-month returns differ reliably from any coin's in the right direction. See §5 *Phase 6*.
+- Phase 7: Step 1 built (the in-app Backtest page shows each rating's median, wins, losses, worst case and 90% range against the yardstick). Steps 2–3 tested and not shipped: no volume variant improves on the current reading beyond chance, and stablecoin supply failed both as market timing and as a fifth check. See §5 *Phase 7*.
 
 ---
 

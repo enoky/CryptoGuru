@@ -206,3 +206,42 @@ The current rules with one check left out (its weight set to 0, the others resca
 | **Any coin-day (yardstick)** | 54,853 | 45.8% | +3.9% [−0.3% to +8.7%] | −1.9% | +26.2% | −15.0% | −63% |
 
 Compare each rating with the yardstick row: a rating only tells you something if it differs from any coin-day by more than its range.
+
+---
+
+<!-- Copied from .github/workflows/backtest.yml run 37838827221 (commit 5eb9b97), the Phase 7 run. The current rules' held-out spread (−1.90) differs slightly from the Phase 6 run (−2.06) because the top-100 list and the latest days of data changed between runs. -->
+
+## Volume variants (Phase 7, Step 2), next 30 days
+
+Each variant replaces only the volume reading in the current rules; everything else is unchanged. The variant with the best spread on the tuning years (up to 2022) is picked before looking at the held-out years.
+
+| Rules | Judged on | Spread, tuning (avg of years) | Spread, held-out (avg of years) | Held-out years positive | Held-out pooled [90% range] | Difference from current rules, held-out [90% range] |
+|---|---|---|---|---|---|---|
+| Current rules | up or down | −8.12 | −1.90 | 2 of 4 | −1.45 [−7.25 to +4.92] | — |
+| 90-day momentum | up or down | −2.56 | −1.80 | 1 of 4 | −0.34 [−6.26 to +5.69] | −2.78 to +5.25 |
+| Volume as now (7d ÷ 30d above 1.3 → direction of the 7-day move) | up or down | −8.12 | −1.90 | 2 of 4 | −1.45 [−7.25 to +4.92] | +0.00 to +0.00 |
+| Graded volume ((ratio − 1) ÷ 0.6, capped) | up or down | −8.11 | −1.81 | 2 of 4 | −1.34 [−7.18 to +5.05] | −0.06 to +0.29 |
+| Volume surprise (80th percentile of 180 days) ← picked | up or down | −7.75 | −1.72 | 2 of 4 | −1.36 [−7.14 to +4.74] | −0.38 to +0.50 |
+| Volume surprise (90th percentile of 180 days) | up or down | −7.89 | −2.12 | 2 of 4 | −1.77 [−7.61 to +4.41] | −0.73 to +0.04 |
+| Accumulation / distribution | up or down | −7.92 | −1.57 | 2 of 4 | −1.06 [−6.87 to +5.29] | +0.18 to +0.58 |
+
+Picked variant: **Fails**: positive in only 2 of 4 held-out years; the range of its difference from the current rules includes 0.
+
+## Stablecoin supply (Phase 7, Step 3), next 30 days
+
+Total stablecoin supply from DefiLlama (3,236 days). Market timing gives every coin the same call on a day, so its spread is the next-30-day return on days supply grew minus days it shrank. The fifth check adds the 30-day change ÷ 3% (capped at ±1) to the current rules at weight 15.
+
+| Rules | Judged on | Spread, tuning (avg of years) | Spread, held-out (avg of years) | Held-out years positive | Held-out pooled [90% range] | Difference from current rules, held-out [90% range] |
+|---|---|---|---|---|---|---|
+| Current rules | up or down | −8.12 | −1.90 | 2 of 4 | −1.45 [−7.25 to +4.92] | — |
+| 90-day momentum | up or down | −2.56 | −1.80 | 1 of 4 | −0.34 [−6.26 to +5.69] | −2.78 to +5.25 |
+| Stablecoin supply as market timing (±0% over 30 days) ← picked | up or down | +6.20 | −11.52 | 2 of 4 | +0.43 [−6.13 to +7.29] | −4.78 to +9.12 |
+| Stablecoin supply as market timing (±1% over 30 days) | up or down | +1.67 | +8.92 | 2 of 3 | +0.86 [−6.62 to +8.36] | −5.53 to +10.26 |
+| Stablecoin supply as market timing (±2% over 30 days) | up or down | +1.99 | +6.14 | 1 of 2 | −1.65 [−12.65 to +9.67] | −10.22 to +10.63 |
+| Current rules + stablecoin supply as a fifth check (weight 15) | up or down | −9.01 | −2.01 | 2 of 4 | −2.38 [−9.00 to +4.64] | −2.60 to +0.78 |
+
+Market timing, picked level: **Fails**: not above the current rules; not above 90-day momentum; positive in only 2 of 4 held-out years; the range of its difference from the current rules includes 0.
+
+Fifth check: **Fails**: not above the current rules; not above 90-day momentum; positive in only 2 of 4 held-out years; the range of its difference from the current rules includes 0.
+
+Acceptance: on the held-out years, a higher spread than the current rules and 90-day momentum, positive in most years, and a 90% range for the difference from the current rules that excludes 0.

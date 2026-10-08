@@ -14,6 +14,7 @@ import {
   type Checks,
   toneOf,
 } from './signals';
+import { bootstrap, median, monthIndex } from './stats';
 import type { Candle } from './types';
 
 /**
@@ -161,6 +162,61 @@ export interface HorizonResult {
   labels: Record<SignalLabel, Tally>;
   /** Uptrend and downtrend ratings by agreement: were ratings the checks agreed on more often right? */
   calls: Record<Agreement, Hits>;
+  /** Each rating, and every coin-day as 'Any', in detail (from `addDetails`). */
+  details: Partial<Record<DetailKey, Detail>>;
+}
+
+export type DetailKey = SignalLabel | 'Any';
+
+/** One rating's returns in detail, all in %. */
+export interface Detail {
+  median: number;
+  /** Average return when the price rose / fell; null if it never did. */
+  avgRose: number | null;
+  avgFell: number | null;
+  worst: number;
+  /** 90% range for the average, from resampling whole months; null with under 2 months. */
+  range: [number, number] | null;
+}
+
+/** Every return per rating and per month, kept outside the result (it's large) until `addDetails` summarises it. */
+export type Samples = Record<Horizon, Map<DetailKey, { rets: number[]; months: Map<number, { n: number; sum: number }> }>>;
+
+export const emptySamples = (): Samples => ({ 7: new Map(), 30: new Map() });
+
+function sample(s: Samples, h: Horizon, key: DetailKey, t: number, ret: number) {
+  let e = s[h].get(key);
+  if (!e) s[h].set(key, (e = { rets: [], months: new Map() }));
+  e.rets.push(ret);
+  const m = monthIndex(t);
+  const x = e.months.get(m) ?? { n: 0, sum: 0 };
+  x.n++;
+  x.sum += ret;
+  e.months.set(m, x);
+}
+
+/** Summarise the samples into each horizon's `details`. */
+export function addDetails(result: BacktestResult, samples: Samples): BacktestResult {
+  for (const h of HORIZONS) {
+    for (const [key, e] of samples[h]) {
+      if (!e.rets.length) continue;
+      const rose = e.rets.filter((r) => r > 0);
+      const fell = e.rets.filter((r) => r < 0);
+      const mean = (xs: number[]) => (xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length) * 100 : null);
+      const range = bootstrap([...e.months.values()], (ms) => {
+        const n = ms.reduce((a, m) => a + m.n, 0);
+        return n ? (ms.reduce((a, m) => a + m.sum, 0) / n) * 100 : null;
+      });
+      result.horizons[h].details[key] = {
+        median: median(e.rets)! * 100,
+        avgRose: mean(rose),
+        avgFell: mean(fell),
+        worst: Math.min(...e.rets) * 100,
+        range,
+      };
+    }
+  }
+  return result;
 }
 
 export interface BacktestResult {
@@ -177,7 +233,7 @@ export function emptyHorizon(): HorizonResult {
   for (const l of LABELS) labels[l] = emptyTally();
   const calls = {} as HorizonResult['calls'];
   for (const c of AGREEMENTS) calls[c] = { n: 0, right: 0 };
-  return { baseline: emptyTally(), groups, labels, calls };
+  return { baseline: emptyTally(), groups, labels, calls, details: {} };
 }
 
 export function emptyResult(): BacktestResult {
@@ -186,8 +242,8 @@ export function emptyResult(): BacktestResult {
 
 const toneOfLabel = (l: SignalLabel) => ({ up: 1, down: -1, neutral: 0 })[toneOf(l)];
 
-/** Add one coin's readings into the running result. */
-export function tally(result: BacktestResult, coinId: string, rs: Reading[]): BacktestResult {
+/** Add one coin's readings into the running result (and, if given, into `samples` for `addDetails`). */
+export function tally(result: BacktestResult, coinId: string, rs: Reading[], samples?: Samples): BacktestResult {
   if (rs.length === 0) return result;
   result.coins.push(coinId);
   for (const r of rs) {
@@ -198,6 +254,7 @@ export function tally(result: BacktestResult, coinId: string, rs: Reading[]): Ba
       if (ret == null) continue;
       const hr = result.horizons[h];
       add(hr.baseline, ret);
+      if (samples) sample(samples, h, 'Any', r.t, ret);
       for (const g of GROUPS) {
         const s = dirOf(r.signals[g.key]);
         if (s == null) continue;
@@ -205,6 +262,7 @@ export function tally(result: BacktestResult, coinId: string, rs: Reading[]): Ba
       }
       if (r.label) {
         add(hr.labels[r.label], ret);
+        if (samples) sample(samples, h, r.label, r.t, ret);
         const dir = toneOfLabel(r.label);
         if (dir !== 0 && r.agreement) {
           const c = hr.calls[r.agreement];

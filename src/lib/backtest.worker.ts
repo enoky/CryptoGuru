@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 // Runs the backtest off the main thread so scrolling stays smooth on phones.
-import { completedDays, dayKey, emptyResult, marketHistory, readings, tally } from '../../shared/backtest';
+import { addDetails, completedDays, dayKey, emptyResult, emptySamples, marketHistory, readings, tally } from '../../shared/backtest';
 import type { Candle } from '../../shared/types';
 
 export interface BacktestJob {
@@ -18,9 +18,11 @@ self.onmessage = (e: MessageEvent<BacktestJob>) => {
   // Bitcoin's 90-day return and breadth (over these coins) for each day.
   const market = marketHistory(completed);
   let result = emptyResult();
+  const samples = emptySamples();
   completed.forEach((coin, i) => {
-    result = tally(result, coin.id, readings(coin.id, coin.candles, market, fg));
+    result = tally(result, coin.id, readings(coin.id, coin.candles, market, fg), samples);
     self.postMessage({ type: 'progress', done: i + 1, total: coins.length } satisfies BacktestMessage);
   });
+  addDetails(result, samples);
   self.postMessage({ type: 'done', result } satisfies BacktestMessage);
 };
