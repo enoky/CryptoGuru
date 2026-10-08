@@ -33,6 +33,8 @@ export interface Reading {
   metrics: Metrics;
   signals: Checks['signals'];
   label: SignalLabel | null;
+  /** −100…+100, or null when there was no rating. */
+  score: number | null;
   agreement: Agreement | null;
   /** Return over the next 7 / 30 days, as a fraction; null near the end of the data. */
   returns: Record<Horizon, number | null>;
@@ -120,7 +122,7 @@ export function readings(
     const combined = combine(signals, metrics);
     const returns = {} as Record<Horizon, number | null>;
     for (const h of HORIZONS) returns[h] = i + h < daily.length ? daily[i + h].c / day.c - 1 : null;
-    out.push({ t: day.t, metrics, signals, label: combined?.label ?? null, agreement: combined?.agreement ?? null, returns });
+    out.push({ t: day.t, metrics, signals, label: combined?.label ?? null, score: combined?.score ?? null, agreement: combined?.agreement ?? null, returns });
   }
   return out;
 }

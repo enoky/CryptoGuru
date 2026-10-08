@@ -119,9 +119,9 @@ describe('tally', () => {
 
   it('counts a call as right when the price moved the way the rating leaned', () => {
     const r = tally(emptyResult(), 'x', [
-      { t: 0, metrics: {} as never, signals: {} as never, label: 'Leaning bullish', agreement: 'High', returns: { 7: 0.1, 30: null } },
-      { t: 1, metrics: {} as never, signals: {} as never, label: 'Strong bearish signals', agreement: 'High', returns: { 7: 0.1, 30: null } },
-      { t: 2, metrics: {} as never, signals: {} as never, label: 'Leaning bearish', agreement: 'Low', returns: { 7: -0.1, 30: null } },
+      { t: 0, metrics: {} as never, signals: {} as never, label: 'Leaning bullish', score: 30, agreement: 'High', returns: { 7: 0.1, 30: null } },
+      { t: 1, metrics: {} as never, signals: {} as never, label: 'Strong bearish signals', score: -60, agreement: 'High', returns: { 7: 0.1, 30: null } },
+      { t: 2, metrics: {} as never, signals: {} as never, label: 'Leaning bearish', score: -20, agreement: 'Low', returns: { 7: -0.1, 30: null } },
     ]).horizons[7];
     expect(r.calls.High).toEqual({ n: 2, right: 1 });
     expect(pctRight(r.calls.Low)).toBe(100);
