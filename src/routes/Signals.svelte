@@ -144,7 +144,7 @@
   <p class="mt-3 text-[15px]">
     The weighted total gives a score from −100 to +100. +15 or more leans bullish and +50 or more is strong; the same below zero is
     bearish. Agreement is how many of the checks point the same way. It isn’t a measure of how likely a rating is to be right: in
-    the backtest, ratings the checks agreed on weren’t right more often. Separate cautions are listed when a coin is very volatile,
+    the backtest, ratings the checks agreed on were right only slightly more often over 30 days, and not over 7. Separate cautions are listed when a coin is very volatile,
     thinly traded or has little history, or when the market mood or most other coins lean the other way. Fear &amp; Greed and the
     share of coins in an uptrend are shown as context but never change the score.
   </p>

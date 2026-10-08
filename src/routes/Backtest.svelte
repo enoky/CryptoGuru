@@ -147,7 +147,8 @@
     <div class="rounded-2xl border border-line bg-surface p-4">
       <p class="text-[15px] text-muted">
         How often bullish and bearish ratings were right (the price went the way they leaned), by how much the checks agreed. If
-        agreement helped, High would beat Low; across all coins it hasn’t, which is why it’s called agreement, not confidence.
+        agreement helped, High would beat Low. Across all top-100 coins it has only weakly, over 30 days and not over 7, which is why
+        it’s called agreement, not confidence.
       </p>
       <ul class="mt-2 space-y-1.5">
         {#each AGREEMENTS as c}

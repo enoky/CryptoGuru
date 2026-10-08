@@ -212,20 +212,21 @@ The goal is a rating that is **honest and calibrated**, not one that "predicts" 
 
 **Step 3, measurement (built):** `tests/research/` replays the live rules, a frozen copy of the pre-Phase-4 rules (`tests/research/v1.ts`), 90-day momentum and "always bullish" on ~1000 days for every coin in the top 100 with exchange history, split into an older and a newer half by date. `.github/workflows/backtest.yml` runs it whenever the rules change, monthly, and on demand, and publishes the report as the run summary. The in-app backtest page (20 coins) also gained a "Does confidence mean anything?" section.
 
-**First results** ([`docs/backtest.md`](docs/backtest.md); 64 coins, July 2024 to September 2026):
+**Results** ([`docs/backtest.md`](docs/backtest.md); 63 coins, July 2024 to September 2026; pegged assets left out):
 
 | Next 30 days | Spread, older half | Spread, newer half | Right, newer half |
 |---|---|---|---|
-| Current rules (Phase 4) | −15.5 pts | +13.5 pts | 55.7% |
-| Rules before Phase 4 | −15.0 pts | +12.4 pts | 56.5% |
-| 90-day momentum | −8.3 pts | +8.0 pts | 54.1% |
-| Always bullish | — | — | 44.1% |
+| Current rules (Phase 4) | −15.8 pts | +14.4 pts | 55.6% |
+| Rules before Phase 4 | −15.4 pts | +13.3 pts | 56.5% |
+| 90-day momentum | −8.4 pts | +8.4 pts | 54.0% |
+| Always bullish | — | — | 44.0% |
 
 *Spread* = average return after bullish calls minus after bearish calls.
 
 - **New vs old rules: about the same.** The differences (about 1 point of spread) are far smaller than the swing between the two halves, and overlapping windows on correlated coins leave few independent results. The Phase 4 changes make the ratings more honest and easier to explain; the data doesn't show they made them more accurate.
 - **The rules follow trends, so they depend on the market's mood.** In the older half (mostly a choppy, bounce-back market) bearish calls were followed by *gains* of about 12% on average: the signals pointed the wrong way. In the newer half (mostly falling) they pointed the right way. Both baselines show the same flip. A two-year sample holds about two market regimes, so neither half proves much.
-- **Acceptance check:** "match or beat the current rules and both baselines on the newer half": met on spread at 30 days (+13.5 vs +12.4 and +8.0), roughly matched at 7 days (+1.96 vs +2.03 and +1.60). **"High confidence beats Low": not met.** In the newer half, High, Medium and Low were right 55.0%, 55.4% and 56.7% of the time at 30 days; in the older half High was the *worst* (34.8%). The label measured how much the checks agree, and agreement didn't predict being right.
+- **Acceptance check:** "match or beat the current rules and both baselines on the newer half": met on spread at 30 days (+14.4 vs +13.3 and +8.4), roughly matched at 7 days (+2.08 vs +2.15 and +1.69). **"High confidence beats Low": not met** in the first run, where the label also went down for volatility, thin trading and market mood: High, Medium and Low were right 55.0%, 55.4% and 56.7% of the time at 30 days in the newer half, and High was the *worst* in the older half (34.8%).
+- **Agreement, as now defined** (share of all checks pointing the rating's way, no cautions mixed in): at 30 days High beat Low in both halves (43.8% vs 37.7% older, 58.0% vs 55.0% newer), but only a few percent of ratings reach High (929 and 602 coin-days), and at 7 days there's no pattern (newer half: High 46.0%, Low 55.4%). Not strong enough to call it confidence.
 
 **Decided after the first results (built)**
 1. **Confidence renamed to Agreement.** Tuning it on the older half would just fit one market regime, so the rule stays, named for what it measures, and it now measures only that: volatility, thin trading, few checks and market context are listed as separate cautions instead of lowering the level. The app says agreement isn't a measure of how likely a rating is to be right, and the backtest page asks "Were ratings right more often when the checks agreed?"
@@ -414,7 +415,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 
 Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`; the nightly contract check has passed against all live APIs.
 
-- Phase 4: Steps 1–3 built (156 unit tests, 112 browser tests). First all-coins backtest: the new rules match the old ones and beat both baselines on the newer half, but agreement between the checks didn't predict being right, so "confidence" is now "agreement"; pegged assets are found by how little their price moves. See §5 *Phase 4*. Step 4 (futures funding) waits on the Worker CPU check.
+- Phase 4: Steps 1–3 built (157 unit tests, 112 browser tests). All-coins backtest: the new rules match the old ones and beat both baselines on the newer half; agreement between the checks predicts being right only weakly at best, so "confidence" is now "agreement"; pegged assets are found by how little their price moves. See §5 *Phase 4*. Step 4 (futures funding) waits on the Worker CPU check.
 
 ---
 
