@@ -86,9 +86,24 @@
     if (stable) return null;
     const server = signalsState.doc?.items[id];
     if (server && Date.now() - server.asOf < 3 * 60 * 60_000) return server;
-    // The page's own calculation needs today's Fear & Greed from market data.
+    // The page's own calculation takes Fear & Greed and liquidity from market data, and Bitcoin's
+    // return and market breadth from the server's ratings when they've loaded.
     if (daily && market.snapshot) {
-      const local = computeSignal(id, daily.candles, daily.source, market.snapshot.fearGreed?.data.value ?? null, daily.asOf);
+      const ctx = signalsState.doc?.market;
+      const turnover = asset?.volume24h != null && asset.marketCap ? (asset.volume24h / asset.marketCap) * 100 : null;
+      const local = computeSignal(
+        id,
+        daily.candles,
+        daily.source,
+        {
+          fearGreed: market.snapshot.fearGreed?.data.value ?? null,
+          btcReturn90d: ctx?.btcReturn90d ?? null,
+          breadth: ctx?.breadth ?? null,
+          turnover,
+          athChangePct: asset?.athChangePct ?? null,
+        },
+        daily.asOf,
+      );
       if (local) return local;
     }
     return server ?? null;

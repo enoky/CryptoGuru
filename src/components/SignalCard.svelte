@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { INDICATORS, THRESHOLDS, topReasons, type CoinSignal } from '../../shared/signals';
-  import { explain, formatScore } from '../lib/explain';
+  import { dirOf, GROUPS, TREND_PARTS, topReasons, type CoinSignal } from '../../shared/signals';
+  import { explainAdjustment, explainContext, explainGroup, explainPart, formatReading, formatScore } from '../lib/explain';
   import { formatTime, sourceLabel } from '../lib/format';
   import { volatilityLabel } from '../../shared/series';
   import BottomSheet from './BottomSheet.svelte';
@@ -12,7 +12,7 @@
 
   const reasons = $derived(topReasons(signal, 2));
   const fallbackReasons = $derived(reasons.length ? reasons : (['trend', 'rsi'] as const));
-  const highVol = $derived(signal.metrics.volatility != null && signal.metrics.volatility > THRESHOLDS.highVolatility);
+  const context = $derived(explainContext(signal.metrics));
   const toneText = $derived(signal.tone === 'bullish' ? 'text-up' : signal.tone === 'bearish' ? 'text-down' : 'text-fg');
 </script>
 
@@ -28,16 +28,16 @@
   <ul class="mt-3 space-y-2">
     {#each fallbackReasons as key}
       <li class="flex gap-2.5">
-        <SigIcon sig={signal.signals[key]} />
-        <span class="text-[15px]">{explain(key, signal.metrics, signal.signals[key])}</span>
+        <SigIcon sig={dirOf(signal.signals[key])} />
+        <span class="text-[15px]">{explainGroup(key, signal)}</span>
       </li>
     {/each}
-    {#if highVol}
+    {#each signal.adjustments.slice(0, 1) as a}
       <li class="flex gap-2.5">
         <span class="grid size-6 shrink-0 place-items-center text-warn" aria-hidden="true">!</span>
-        <span class="text-[15px]">Volatility is high ({signal.metrics.volatility!.toFixed(0)}% a year), so these signals can change quickly.</span>
+        <span class="text-[15px]">{explainAdjustment(a, signal.metrics)}</span>
       </li>
-    {/if}
+    {/each}
   </ul>
 
   <button type="button" class="mt-3 min-h-11 w-full rounded-xl border border-line font-medium hover:bg-surface-2" onclick={() => (open = true)}>
@@ -50,28 +50,62 @@
   <p class="font-semibold {toneText}">{signal.label} · {signal.confidence} confidence</p>
   <p class="text-sm text-muted">{name} · score {formatScore(signal.score)} out of ±100</p>
   <ul class="mt-4 space-y-4">
-    {#each INDICATORS as ind}
-      {@const sig = signal.signals[ind.key]}
+    {#each GROUPS as g}
+      {@const v = signal.signals[g.key]}
       <li class="flex gap-3">
-        <SigIcon {sig} />
+        <SigIcon sig={dirOf(v)} />
         <div class="min-w-0">
-          <div class="font-medium">{ind.name} <span class="text-sm font-normal text-muted">· weight {ind.weight}%</span></div>
-          <p class="text-[15px] {sig == null ? 'text-muted' : ''}">{explain(ind.key, signal.metrics, sig)}</p>
+          <div class="font-medium">
+            {g.name}
+            <span class="text-sm font-normal text-muted">· weight {g.weight}%{v != null ? ` · reading ${formatReading(v)}` : ''}</span>
+          </div>
+          <p class="text-[15px] {v == null ? 'text-muted' : ''}">{explainGroup(g.key, signal)}</p>
+          {#if g.key === 'trend'}
+            <ul class="mt-2 space-y-2 border-l-2 border-line pl-3">
+              {#each TREND_PARTS as p}
+                {@const pv = signal.trendParts[p.key]}
+                <li>
+                  <div class="text-sm font-medium">{p.name}{pv != null ? ` · ${formatReading(pv)}` : ''}</div>
+                  <p class="text-sm {pv == null ? 'text-muted' : ''}">{explainPart(p.key, signal.metrics, pv)}</p>
+                </li>
+              {/each}
+            </ul>
+          {/if}
         </div>
       </li>
     {/each}
   </ul>
-  {#if signal.metrics.volatility != null}
-    <p class="mt-4 rounded-xl bg-surface-2 p-3 text-[15px]">
-      Volatility: {signal.metrics.volatility.toFixed(0)}% a year ({volatilityLabel(signal.metrics.volatility).toLowerCase()}).
-      {highVol ? 'That’s high, so confidence is lowered a level and these signals can change quickly.' : ''}
-    </p>
+
+  {#if signal.adjustments.length}
+    <h3 class="mt-5 font-semibold">Why confidence is lower</h3>
+    <ul class="mt-2 space-y-2">
+      {#each signal.adjustments as a}
+        <li class="flex gap-2.5">
+          <span class="grid size-6 shrink-0 place-items-center text-warn" aria-hidden="true">!</span>
+          <span class="text-[15px]">{explainAdjustment(a, signal.metrics)}</span>
+        </li>
+      {/each}
+    </ul>
   {/if}
+
+  <h3 class="mt-5 font-semibold">Market context <span class="text-sm font-normal text-muted">· not scored</span></h3>
+  <ul class="mt-2 space-y-2 text-[15px]">
+    {#if signal.metrics.volatility != null}
+      <li>
+        <span class="font-medium">Volatility:</span>
+        {signal.metrics.volatility.toFixed(0)}% a year ({volatilityLabel(signal.metrics.volatility).toLowerCase()}).
+      </li>
+    {/if}
+    {#each context as c (c.key)}
+      <li><span class="font-medium">{c.title}:</span> {c.text}</li>
+    {/each}
+  </ul>
+
   <h3 class="mt-5 font-semibold">How the score works</h3>
   <p class="mt-1 text-[15px] text-muted">
-    Each indicator counts +1 (bullish), −1 (bearish) or 0, times its weight. The total is scaled to −100…+100 over the indicators
-    that had enough data. +15 or more leans bullish, +50 or more is strong; the same below zero for bearish. Confidence is how many
-    of the indicators agree.
+    Each check reads from −1 (bearish) to +1 (bullish), times its weight; the trend reading is the average of its three parts. The total
+    is scaled to −100…+100 over the checks that had enough data. +15 or more leans bullish, +50 or more is strong; the same below zero
+    for bearish. Confidence is how many checks agree, lowered for the reasons listed above. Market context never changes the score.
   </p>
   <p class="mt-3 text-sm text-muted">
     Based on {signal.metrics.days} days of {sourceLabel(signal.source)} prices, calculated at {formatTime(signal.asOf)}.

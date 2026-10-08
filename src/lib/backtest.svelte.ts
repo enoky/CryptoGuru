@@ -8,7 +8,7 @@ import { idbGet, idbSet } from './storage';
 
 /** The largest coins by market cap, stablecoins excluded. */
 export const BACKTEST_COINS = 20;
-const KEY = 'backtest:v1';
+const KEY = 'backtest:v2';
 
 interface Cached {
   day: number;

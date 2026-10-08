@@ -1,6 +1,6 @@
 /** Deterministic fake market data for browser tests, Lighthouse and `MOCK_API=1` local runs. */
 import { roundSig } from '../../shared/series';
-import { computeSignal, emptySignalsDoc, isStablecoin, type SignalsDoc } from '../../shared/signals';
+import { BTC_ID, computeSignal, emptySignalsDoc, isStablecoin, marketContext, type SignalsDoc } from '../../shared/signals';
 import type { Asset, CandleSet, Range, Snapshot } from '../../shared/types';
 
 const NAMES = [
@@ -96,12 +96,19 @@ export function makeHistory(id: string, price: number): CandleSet {
 export function makeSignals(snapshot: Snapshot): SignalsDoc {
   const doc = emptySignalsDoc();
   const now = Date.now();
-  for (const a of snapshot.markets!.data) {
-    if (isStablecoin(a.symbol)) continue;
-    const s = computeSignal(a.id, makeCandles(a.id, '1y', a.price).candles, 'binance', snapshot.fearGreed?.data.value ?? null, now);
+  // Like the Worker: Bitcoin first, since every other coin's strength is measured against it.
+  const coins = snapshot.markets!.data.filter((a) => !isStablecoin(a.symbol));
+  coins.sort((a, b) => Number(b.id === BTC_ID) - Number(a.id === BTC_ID));
+  // Two passes, like the Worker after its first full cycle: the second has breadth over every coin.
+  for (const a of [...coins, ...coins]) {
+    const market = marketContext(doc.items);
+    const turnover = a.volume24h != null && a.marketCap ? (a.volume24h / a.marketCap) * 100 : null;
+    const ctx = { fearGreed: snapshot.fearGreed?.data.value ?? null, ...market, turnover, athChangePct: a.athChangePct };
+    const s = computeSignal(a.id, makeCandles(a.id, '1y', a.price).candles, 'binance', ctx, now);
     if (s) doc.items[a.id] = s;
   }
   doc.asOf = now;
+  doc.market = marketContext(doc.items);
   return doc;
 }
 

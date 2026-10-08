@@ -3,7 +3,7 @@ import { CircuitBreaker } from '../../shared/failover';
 import { fetchJson } from '../../shared/http';
 import { buildSnapshot, fetchLivePrices } from '../../shared/snapshot';
 import { fetchFearGreedHistory } from '../../shared/sources/feargreed';
-import type { SignalsDoc } from '../../shared/signals';
+import { SIGNALS_VERSION, type SignalsDoc } from '../../shared/signals';
 import { emptySnapshot, type CandleSet, type PriceMap, type Range, type Snapshot } from '../../shared/types';
 
 /**
@@ -80,7 +80,7 @@ export async function loadCandles(
  */
 export async function loadSignals(): Promise<SignalsDoc> {
   const doc = await fromWorker<SignalsDoc>('/api/signals');
-  if (!doc || typeof doc.items !== 'object') throw new Error('Bad signals response');
+  if (!doc || typeof doc.items !== 'object' || doc.version !== SIGNALS_VERSION) throw new Error('Bad signals response');
   return doc;
 }
 

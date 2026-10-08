@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { avgReturn, HORIZONS, LABELS, pctFell, pctRose, type Horizon, type Tally } from '../../shared/backtest';
-  import { INDICATORS } from '../../shared/signals';
+  import { avgReturn, CONFIDENCES, HORIZONS, LABELS, pctFell, pctRight, pctRose, type Horizon, type Tally } from '../../shared/backtest';
+  import { GROUPS } from '../../shared/signals';
   import HitBar from '../components/HitBar.svelte';
   import ErrorInline from '../components/ErrorInline.svelte';
   import { formatDate, formatPct, sourceLabel } from '../lib/format';
@@ -113,12 +113,12 @@
   </section>
 
   <section class="mt-5" aria-labelledby="ind-heading">
-    <h2 id="ind-heading" class="mb-2 px-1 font-semibold">Each indicator</h2>
+    <h2 id="ind-heading" class="mb-2 px-1 font-semibold">Each check</h2>
     <ul class="space-y-2">
-      {#each INDICATORS as ind}
-        {@const t = r.indicators[ind.key]}
+      {#each GROUPS as g}
+        {@const t = r.groups[g.key]}
         <li class="rounded-2xl border border-line bg-surface p-4">
-          <h3 class="font-medium">{ind.name}</h3>
+          <h3 class="font-medium">{g.name}</h3>
           {#each [{ kind: 'bullish', tally: t.bullish }, { kind: 'bearish', tally: t.bearish }] as row}
             {@const pct = row.kind === 'bearish' ? pctFell(row.tally) : pctRose(row.tally)}
             {@const base = row.kind === 'bearish' ? baseFell : baseRose}
@@ -142,6 +142,26 @@
     </ul>
   </section>
 
+  <section class="mt-5" aria-labelledby="conf-heading">
+    <h2 id="conf-heading" class="mb-2 px-1 font-semibold">Does confidence mean anything?</h2>
+    <div class="rounded-2xl border border-line bg-surface p-4">
+      <p class="text-[15px] text-muted">
+        How often bullish and bearish ratings were right (the price went the way they leaned), by confidence. High should beat Low.
+      </p>
+      <ul class="mt-2 space-y-1.5">
+        {#each CONFIDENCES as c}
+          {@const h = r.calls[c]}
+          <li class="flex items-baseline justify-between gap-3 text-[15px]">
+            <span class="font-medium">{c} confidence</span>
+            <span class="tabular-nums">
+              {#if h.n}<strong>{pct0(pctRight(h))}</strong> right <span class="text-sm text-muted">· {count(h.n)} days</span>{:else}<span class="text-muted">didn’t occur</span>{/if}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  </section>
+
   <section class="mt-5 rounded-2xl border border-line bg-surface p-4 text-[15px]" aria-labelledby="caveats-heading">
     <h2 id="caveats-heading" class="font-semibold">Read this before trusting any number above</h2>
     <ul class="mt-2 list-disc space-y-1 pl-5 text-muted">
@@ -149,6 +169,7 @@
       <li>Neighbouring days overlap (their next-{horizon}-day windows share most days), so there are far fewer truly independent results than the day counts suggest.</li>
       <li>The {BACKTEST_COINS} coins move together, which shrinks the evidence further.</li>
       <li>The coins are today’s largest: ones that collapsed and left the top 100 aren’t included, which flatters the results.</li>
+      <li>Market breadth here covers these {BACKTEST_COINS} coins only (the live ratings use about 90), and past liquidity isn’t available, so it never lowers confidence here.</li>
       <li>No trading costs, taxes or slippage are included. This is not financial advice.</li>
     </ul>
     <p class="mt-3 text-sm text-muted">

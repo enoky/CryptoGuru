@@ -87,6 +87,33 @@ describe('refreshSignals', () => {
     expect(halfDay.rated).toEqual(['leo']);
   });
 
+  it('rates Bitcoin first and measures the other coins against it in the same run', async () => {
+    const r = await run(null, [asset('ethereum', 'ETH', 3000), asset('bitcoin', 'BTC', 100)]);
+    expect(r.rated).toEqual(['bitcoin', 'ethereum']);
+    const btc = r.doc.items.bitcoin.metrics.return90d!;
+    expect(btc).toBeGreaterThan(0);
+    expect(r.doc.items.bitcoin.signals.strength).toBeNull();
+    expect(r.doc.items.ethereum.metrics.btcReturn90d).toBe(btc);
+    expect(r.doc.items.ethereum.signals.strength).toBe(0); // same shape of chart: neither leads
+    expect(r.doc.market).toEqual({ btcReturn90d: btc, breadth: null, breadthCoins: 2 });
+  });
+
+  it('passes each coin’s liquidity and distance from its all-time high', async () => {
+    const a = { ...asset('ethereum', 'ETH', 3000), volume24h: 5e8, marketCap: 1e11, athChangePct: -40 };
+    const r = await run(null, [a]);
+    expect(r.doc.items.ethereum.metrics.turnover).toBe(0.5);
+    expect(r.doc.items.ethereum.metrics.athChangePct).toBe(-40);
+    expect(r.doc.items.ethereum.adjustments).toContain('thin');
+  });
+
+  it('starts again from scratch when the stored ratings are in an older format', async () => {
+    const old = { asOf: NOW - 60_000, items: { bitcoin: { id: 'bitcoin', asOf: NOW - 60_000 } }, skipped: {} } as unknown as SignalsDoc;
+    const r = await run(old, [asset('bitcoin', 'BTC', 100)]);
+    expect(r.rated).toEqual(['bitcoin']);
+    expect(r.doc.version).toBe(2);
+    expect(r.doc.items.bitcoin.trendParts).toBeDefined();
+  });
+
   it('drops coins that left the top 100', async () => {
     const first = await run(null, [asset('bitcoin', 'BTC', 100), asset('ethereum', 'ETH', 3000)]);
     const r = await run(first.doc, [asset('bitcoin', 'BTC', 100)], undefined, 45, NOW + 60_000);

@@ -1,9 +1,9 @@
-import type { SignalsDoc } from '../../shared/signals';
+import { SIGNALS_VERSION, type SignalsDoc } from '../../shared/signals';
 import { loadSignals } from './api';
 import { afterFirstPaint } from './paint';
 import { idbGet, idbSet } from './storage';
 
-const KEY = 'signals:v1';
+const KEY = 'signals:v2';
 const POLL_MS = 10 * 60_000;
 
 class SignalsState {
@@ -24,7 +24,7 @@ export async function startSignals() {
   await afterFirstPaint();
   // Saved copy and fresh fetch in parallel; the saved copy shows only if it lands first.
   const showCached = idbGet<SignalsDoc>(KEY).then((cached) => {
-    if (cached?.items && !signalsState.doc) signalsState.doc = cached;
+    if (cached?.version === SIGNALS_VERSION && cached.items && !signalsState.doc) signalsState.doc = cached;
   });
   await Promise.all([showCached, refreshSignals()]);
   setInterval(() => {
