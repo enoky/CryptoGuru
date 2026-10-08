@@ -1,4 +1,4 @@
-import { CircuitBreaker, firstSuccessful, type Attempt } from './failover';
+import { CircuitBreaker, firstSuccessful, NotAvailable, type Attempt } from './failover';
 import type { FetchFn } from './http';
 import * as binance from './sources/binance';
 import * as coingecko from './sources/coingecko';
@@ -27,10 +27,10 @@ export interface CandleRequest {
 /** Exchange data is matched by ticker, so check it really is the same coin. */
 function checked(candles: Candle[], refPrice: number | undefined, source: string): Candle[] {
   const clean = cleanCandles(candles);
-  if (clean.length < 10) throw new Error(`${source}: too few candles`);
+  if (clean.length < 10) throw new NotAvailable(`${source}: too few candles`);
   const last = clean[clean.length - 1].c;
   if (refPrice && Math.abs(last - refPrice) / refPrice > 0.1) {
-    throw new Error(`${source}: price ${last} doesn't match ${refPrice}, probably a different coin`);
+    throw new NotAvailable(`${source}: price ${last} doesn't match ${refPrice}, probably a different coin`);
   }
   return clean;
 }

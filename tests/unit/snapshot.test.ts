@@ -89,6 +89,23 @@ describe('fetchCandleSet', () => {
     expect(f.calls.some((u) => u.includes('binance'))).toBe(false);
   });
 
+  it('coins an exchange lists under another coin do not switch that exchange off', async () => {
+    // Binance returns another coin's prices for these tickers (price check fails) or doesn't list them (HTTP 400).
+    const f = mockFetch(
+      healthyRoutes({
+        [`${BINANCE_BASE}/klines`]: (url: string) => (url.includes('symbol=BTC') ? klines(64000) : url.includes('symbol=AAA') ? klines(5) : 400),
+      }),
+    );
+    const breaker = new CircuitBreaker();
+    for (const symbol of ['AAA', 'BBB', 'CCC', 'DDD']) {
+      const set = await fetchCandleSet({ id: symbol.toLowerCase(), symbol, refPrice: 64000, range: '7d' }, f, breaker, opts);
+      expect(set.source).toBe('coingecko');
+    }
+    expect(breaker.isOpen('binance')).toBe(false);
+    const btc = await fetchCandleSet({ id: 'bitcoin', symbol: 'BTC', refPrice: 64000, range: '7d' }, f, breaker, opts);
+    expect(btc.source).toBe('binance');
+  });
+
   it('uses Kraken when Binance and CoinGecko are down', async () => {
     const f = mockFetch(healthyRoutes({}, [BINANCE_BASE, COINGECKO_BASE]));
     const set = await fetchCandleSet({ id: 'bitcoin', symbol: 'BTC', refPrice: 64000, range: '7d' }, f, new CircuitBreaker(), opts);

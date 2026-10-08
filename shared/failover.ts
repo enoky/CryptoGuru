@@ -1,3 +1,15 @@
+import { HttpError } from './http';
+
+/**
+ * The source works but doesn't have this item (e.g. a coin it doesn't list).
+ * Not an outage, so it doesn't count towards switching the source off.
+ */
+export class NotAvailable extends Error {}
+
+/** "Not listed here" answers: ours, and HTTP 400/404 from the source (e.g. Binance "Invalid symbol"). */
+export const isNotAvailable = (err: unknown) =>
+  err instanceof NotAvailable || (err instanceof HttpError && (err.status === 400 || err.status === 404));
+
 /**
  * Skips a source for a cool-off period after repeated failures, so a dead API
  * doesn't slow every request down while we wait for it to time out.
@@ -67,7 +79,8 @@ export async function firstSuccessful<T, S extends string>(
       breaker.success(a.name);
       return { value, source: a.name };
     } catch (err) {
-      breaker.failure(a.name);
+      // Only real outages (timeouts, rate limits, server errors, bad data) count against a source.
+      if (!isNotAvailable(err)) breaker.failure(a.name);
       errors.push({ name: a.name, message: err instanceof Error ? err.message : String(err) });
     }
   }

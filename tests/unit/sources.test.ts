@@ -110,9 +110,14 @@ describe('Kraken', () => {
     expect(c[0].t).toBe(1_700_000_000_000);
   });
 
-  it('surfaces Kraken error messages', async () => {
-    const f = mockFetch({ [kraken.KRAKEN_BASE]: () => ({ error: ['EQuery:Unknown asset pair'] }) });
-    await expect(kraken.fetchCandles(f, 'ABC', '7d', o)).rejects.toThrow('Unknown asset pair');
+  it('treats an unknown pair as "not listed", other errors as failures', async () => {
+    const { NotAvailable } = await import('../../shared/failover');
+    const unknown = mockFetch({ [kraken.KRAKEN_BASE]: () => ({ error: ['EQuery:Unknown asset pair'] }) });
+    await expect(kraken.fetchCandles(unknown, 'ABC', '7d', o)).rejects.toBeInstanceOf(NotAvailable);
+    const busy = mockFetch({ [kraken.KRAKEN_BASE]: () => ({ error: ['EService:Unavailable'] }) });
+    const err = await kraken.fetchCandles(busy, 'ABC', '7d', o).catch((e) => e);
+    expect(err).not.toBeInstanceOf(NotAvailable);
+    expect(err.message).toContain('EService:Unavailable');
   });
 });
 

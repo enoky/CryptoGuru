@@ -1,6 +1,7 @@
 import * as v from 'valibot';
 import { fetchJson, type FetchFn } from '../http';
 import type { Candle, LivePrice, Range } from '../types';
+import { NotAvailable } from '../failover';
 import { isPositive, numeric, parseItems, parseNumericRows } from '../validate';
 
 /**
@@ -43,7 +44,7 @@ export async function fetchCandles(
   range: Range,
   o: { retries?: number; baseDelayMs?: number; days?: number } = {},
 ): Promise<Candle[]> {
-  if (!hasUsdtPair(symbol)) throw new Error(`Binance: no USDT pair for ${symbol}`);
+  if (!hasUsdtPair(symbol)) throw new NotAvailable(`Binance: no USDT pair for ${symbol}`);
   const { interval } = KLINES[range];
   const limit = range === '1y' && o.days ? o.days : KLINES[range].limit;
   const raw = await fetchJson(fetchFn, `${BINANCE_BASE}/klines?symbol=${symbol}USDT&interval=${interval}&limit=${limit}`, o);
