@@ -399,6 +399,43 @@ Phases 5–7 tested every reasonable idea within reach of free public data: diff
 
 Reopen only with genuinely new information that has enough free history to backtest. The monthly backtest keeps re-checking the current rules and the Phase 6–7 analyses as new months arrive.
 
+### Phase 8: CME futures positioning (CFTC), backtest only
+
+This is the one source that qualifies under the reopening clause above. It's genuinely new information: who holds positions, not what price did. It's free, official and in the public domain, and it has enough history to tune and test. Nothing live changes unless a rule passes the standing acceptance rule, including the 1-point minimum gain.
+
+**Data:** the CFTC's weekly *Traders in Financial Futures* report for CME Bitcoin futures, futures only, from the CFTC public reporting API (`publicreporting.cftc.gov`, Socrata, keyless) ⚠ verify the dataset id and the CME Bitcoin contract code before build. It has been published since December 2017. It splits open interest into asset managers, leveraged funds (mostly hedge funds), dealers and other reportables.
+
+- **Fetching:** the backtest downloads the full history once per run, about 460 weekly rows.
+- **No looking ahead:** positions are as of Tuesday, published Friday afternoon (US Eastern). A report counts from the following Saturday (UTC), so no day uses a report before it was public.
+- **Scope:** Bitcoin positioning only. CME Ether futures start in February 2021, too late for the tuning years. The reading is market-wide, so every coin gets the same value on a day, like stablecoin supply in Phase 7.
+
+**Readings, fixed before the run:**
+
+- *Asset managers' net position* (long − short, as % of open interest), change over the last 4 reports. Asset managers mostly hold outright exposure, so rising net length means they're buying.
+- *Leveraged funds at extremes*, contrarian: their net position as % of open interest, placed within its own last 52 weeks. In the top fifth → down; in the bottom fifth → up; otherwise none. Crowded hedge-fund positioning tends to unwind.
+
+**Candidates, fixed before the run:**
+
+1. *Asset-manager timing:* 4-week change above +L points → every coin up; below −L → every coin down; L ∈ {0, 2, 5} percentage points of open interest, picked on the tuning years.
+2. *Leveraged-fund contrarian timing:* the extreme rule above, applied to every coin.
+3. *A fifth check:* the asset-manager reading ÷ 5 points, capped at ±1, added to the current rules at weight 15 (the others rescaled).
+
+**What could undermine it:**
+
+- **Arbitrage, not views.** Since the US spot ETFs launched (January 2024), much of the leveraged-fund short is a *basis trade*: short CME futures, long the ETF, to earn the gap between them. That's arbitrage, not a view on price. The held-out years are mostly in that regime and the tuning years aren't, so a rule tuned before 2024 may read arbitrage as bearishness.
+- **Coarse timing.** The data is weekly and 3 days late.
+- **Few independent episodes.** Only about 4 positioning cycles fall in the tuning years.
+
+Expect failure. The report will say so plainly either way.
+
+**If something passes:**
+
+- The Worker adds one CFTC request per week, cached in KV for 7 days; the 50-request limit isn't affected.
+- §1 gains the CFTC as a source, with attribution.
+- "Why this rating?" explains the new input in plain words.
+
+**Acceptance:** the standing acceptance rule (§5, *Where the accuracy work stops*), including the 1-point minimum gain. The result is recorded here either way.
+
 ## 6. UI/UX design (mobile first)
 
 **Phones are the main target.** Every screen is designed for a **360–430 px wide portrait phone** first, used one-handed. Larger screens then get extra room. "Done" for any screen means it looks right and works by thumb on a small phone (iPhone SE / small Android) before anyone looks at the desktop layout.
@@ -550,6 +587,7 @@ How to get there: lazy-load routes and the chart library; serve the snapshot fro
 | **5: Accuracy** | Backtest back to 2017, reported per year and market phase, tuned on 2017–2022 and tested on 2023 onward; results measured against the market (relative momentum); a choppy-market filter; stricter bullish/bearish bands; futures funding and open interest if reachable (see §5, *Phase 5*) | 1.5–2 weeks | On the held-out years, positive 30-day spread in most years and higher than the current rules and 90-day momentum; steps that don't beat the current rules aren't shipped; Worker CPU under 10 ms per run |
 | **6: Learned weights** | Logistic-regression weights fitted on the tuning years; one-check-out ablation; per-rating median, wins, losses and worst case vs any coin-day; block-bootstrap 90% ranges (see §5, *Phase 6*) | 2–3 days | Phase 5 acceptance, and the range of the difference from the current rules excludes 0 (not met: nothing shipped) |
 | **7: Detail, volume, stablecoins** | Per-rating median, wins, losses, worst case and ranges on the in-app Backtest page; one volume test with variants fixed in advance; stablecoin supply (DefiLlama) as market timing and as a fifth check (see §5, *Phase 7*) | 3–4 days | Backtest page shows the detail at phone width; Steps 2–3 pass the Phase 6 acceptance or aren't shipped (Step 1 built; Steps 2–3 not met, nothing shipped) |
+| **8: Futures positioning** | CFTC Traders in Financial Futures for CME Bitcoin (weekly, since Dec 2017): asset-manager timing, leveraged-fund contrarian timing, and a fifth check, all fixed in advance and backtest-only (see §5, *Phase 8*) | 2–3 days | Standing acceptance rule incl. the 1-point minimum gain; otherwise nothing ships |
 | **Later** | Price alerts in the browser (Notification API while the tab is open); more currencies and languages | — | — |
 
 **Total to v1: about 5–6 weeks** for one developer working part-time-to-full-time.
@@ -573,6 +611,7 @@ Deployed to Cloudflare by `.github/workflows/deploy.yml` on every push to `main`
 - Phase 5 (accuracy): Step 1 built (backtest back to 2018, year by year); Steps 2–4 tested and not shipped (none beat the current rules on held-out years); ratings relabelled as uptrend / downtrend, since no rule tested is a reliable forecast. Step 5 (futures funding) tested in the backtest and not shipped: the promising result rested on a few episodes. See §5 *Phase 5*.
 - Phase 6 (learned weights, backtest only): learned weights beat the current rules on held-out years but within chance, and leaned on mean reversion; not shipped. Volume is the only check with a measurable contribution; no rating's next-month returns differ reliably from any coin's in the right direction. See §5 *Phase 6*.
 - Phase 7: Step 1 built (the in-app Backtest page shows each rating's median, wins, losses, worst case and 90% range against the yardstick). Steps 2–3 tested and not shipped: no volume variant improves on the current reading beyond chance, and stablecoin supply failed both as market timing and as a fifth check. See §5 *Phase 7*.
+- Phase 8 (CME futures positioning from the CFTC, backtest only): planned. See §5 *Phase 8*.
 
 ---
 
