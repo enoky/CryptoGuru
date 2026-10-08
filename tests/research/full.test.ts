@@ -15,6 +15,7 @@ import * as coingecko from '../../shared/sources/coingecko';
 import { fetchFearGreedHistory } from '../../shared/sources/feargreed';
 import type { Candle } from '../../shared/types';
 import { addGroupHits, compare, toMarkdown } from './compare';
+import { deeper, deeperMarkdown } from './deeper';
 import { fundingHistory } from './funding';
 import { fullHistory } from './history';
 
@@ -60,7 +61,7 @@ it('backtests every rated coin', async () => {
   const missing = assets.filter((a) => !tested.has(a.id) && !peggedIds.has(a.id)).map((a) => a.name);
 
   const result = addGroupHits(compare(inputs, missing, pegged), inputs);
-  const report = toMarkdown(result, now);
+  const report = `${toMarkdown(result, now)}\n${deeperMarkdown(deeper(inputs))}`;
   writeFileSync(process.env.BACKTEST_REPORT || 'backtest-report.md', report);
   console.log(report);
   expect(tested.size).toBeGreaterThanOrEqual(30);
